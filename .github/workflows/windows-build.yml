@@ -35,7 +35,7 @@ jobs:
               exit 1
             fi
           done
-          if find . -type f \\( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' -o -name '*.pem' -o -name '*.p12' -o -name '*.pfx' -o -name '*.key' -o -name '.env' \\) -not -path './.git/*' | grep .; then
+          if find . -type f -not -path './.git/*' | grep -E '[.]sqlite3?$|[.]db$|[.]pem$|[.]p12$|[.]pfx$|[.]key$|/[.]env$'; then
             echo "::error::Potential private data or key was committed"
             exit 1
           fi
