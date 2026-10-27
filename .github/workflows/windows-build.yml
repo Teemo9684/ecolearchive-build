@@ -1,0 +1,76 @@
+name: Windows installer (reviewed public source)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_candidate:
+        description: "Build reviewed unsigned Windows NSIS candidate"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-public-build
+  cancel-in-progress: false
+
+jobs:
+  security_gate:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.release_candidate }}
+    outputs:
+      approved: ${{ steps.validate.outputs.approved }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: validate
+        name: Check required source and forbid sensitive files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in package.json bun.lock desktop/src-tauri/Cargo.toml desktop/src-tauri/tauri.conf.json desktop/vite.config.ts src/assets/logo-book.png; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing reviewed source: $file"
+              exit 1
+            fi
+          done
+          if find . -type f \\( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' -o -name '*.pem' -o -name '*.p12' -o -name '*.pfx' -o -name '*.key' -o -name '.env' \\) -not -path './.git/*' | grep .; then
+            echo "::error::Potential private data or key was committed"
+            exit 1
+          fi
+          echo 'approved=true' >> "$GITHUB_OUTPUT"
+
+  build_windows:
+    needs: security_gate
+    if: ${{ needs.security_gate.outputs.approved == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build offline frontend
+        run: bun run desktop:build
+      - name: Generate app icons
+        run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
+      - name: Build preview NSIS (no updater signing)
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 tauri.public-preview.json
+          bunx @tauri-apps/cli@2 build --bundles nsis --config tauri.public-preview.json
+          if ($LASTEXITCODE -ne 0) { throw 'Tauri build failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EcoleArchive-Windows-preview
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
