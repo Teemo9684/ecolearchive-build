@@ -1,6 +1,15 @@
 name: Windows installer (reviewed public source)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'desktop/**'
+      - 'public/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'bunfig.toml'
   workflow_dispatch:
     inputs:
       release_candidate:
@@ -19,7 +28,7 @@ concurrency:
 jobs:
   security_gate:
     runs-on: ubuntu-latest
-    if: ${{ inputs.release_candidate }}
+    if: ${{ github.event_name == 'push' || inputs.release_candidate }}
     outputs:
       approved: ${{ steps.validate.outputs.approved }}
     steps:
