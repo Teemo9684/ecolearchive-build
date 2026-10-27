@@ -1,0 +1,92 @@
+name: Publish signed Windows update
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type PUBLISH after checking installer and version"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  signed_update:
+    if: ${{ inputs.confirmation == 'PUBLISH' }}
+    runs-on: windows-2022
+    timeout-minutes: 70
+    environment: windows-updates
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify secrets and release version
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "Missing TAURI_SIGNING_PRIVATE_KEY" }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { throw "Missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if (-not $env:GH_RELEASE_TOKEN) { throw "Missing GH_RELEASE_TOKEN" }
+          $cfg = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          if (-not ($cfg.version -match '^\d+\.\d+\.\d+$')) { throw "Invalid release version" }
+          $tag = 'v' + $cfg.version
+          gh release view $tag -R Teemo9684/ecolearchive-updates 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Release already exists: $tag. Increase version first." }
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Restore reviewed image assets
+        shell: pwsh
+        run: |
+          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/hero-school.jpg')) {
+            $encoded = Get-Content -Raw ($item + '.b64')
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), [Convert]::FromBase64String($encoded.Trim()))
+          }
+      - name: Install and compile frontend
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          bun run desktop:build
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
+          bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
+          if ($LASTEXITCODE -ne 0) { throw 'Icon generation failed' }
+      - name: Build and sign NSIS update
+        working-directory: desktop
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          bunx @tauri-apps/cli@2 build --bundles nsis
+          if ($LASTEXITCODE -ne 0) { throw 'Signed Tauri build failed' }
+      - name: Prepare release metadata
+        shell: pwsh
+        run: |
+          node desktop/updates/prepare-release.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Preparing signed update failed' }
+      - name: Publish to update repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          $cfg = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $tag = 'v' + $cfg.version
+          $dir = 'desktop/update-release'
+          $exe = "EcoleArchive-$($cfg.version)-x64-setup.exe"
+          gh release create $tag "$dir/$exe" "$dir/$exe.sig" "$dir/latest.json" -R Teemo9684/ecolearchive-updates --title "EcoleArchive $tag" --notes "تحديث منظومة التسيير الإداري والأرشيف الرقمي" --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Creating draft release failed' }
+          gh release edit $tag -R Teemo9684/ecolearchive-updates --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing release failed; draft remains for review' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EcoleArchive-signed-update
+          path: desktop/update-release/
+          if-no-files-found: error
+          retention-days: 30
