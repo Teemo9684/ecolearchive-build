@@ -55,6 +55,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+      - name: Restore reviewed binary assets
+        shell: pwsh
+        run: |
+          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/hero-school.jpg')) {
+            $encoded = Get-Content -Raw ($item + '.b64')
+            $bytes = [Convert]::FromBase64String($encoded.Trim())
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), $bytes)
+          }
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
       - name: Build offline frontend
