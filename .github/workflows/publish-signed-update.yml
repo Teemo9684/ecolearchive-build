@@ -32,9 +32,10 @@ jobs:
           $cfg = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
           if (-not ($cfg.version -match '^\d+\.\d+\.\d+$')) { throw "Invalid release version" }
           $tag = 'v' + $cfg.version
-          $existing = gh api "repos/Teemo9684/ecolearchive-updates/releases/tags/$tag" --silent 2>&1
-          if ($LASTEXITCODE -eq 0) { throw "Release already exists: $tag. Increase version first." }
-          if ($existing -notmatch '404') { throw "Cannot verify release availability. Check GH_RELEASE_TOKEN permissions and repository access." }
+          $releaseJson = gh release list -R Teemo9684/ecolearchive-updates --json tagName --limit 100
+          if ($LASTEXITCODE -ne 0) { throw "Cannot list releases. Check GH_RELEASE_TOKEN permissions and repository access." }
+          $releases = @($releaseJson | ConvertFrom-Json)
+          if ($releases | Where-Object { $_.tagName -eq $tag }) { throw "Release already exists: $tag. Increase version first." }
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@stable
         with:
