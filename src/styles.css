@@ -289,3 +289,27 @@
 
 /* Decorative school system heading only; all navigation text keeps the original font. */
 .school-ruqaa-title { font-family: "Aref Ruqaa", "Cairo", serif; font-weight: 700; }
+
+
+/* Restrained golden glint on sidebar heritage emblem, no change to the portrait pixels. */
+.sidebar-heritage-emblem::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  inset: -30%;
+  border-radius: inherit;
+  background: linear-gradient(110deg,transparent 42%,rgba(255,227,156,.04) 47%,rgba(255,241,196,.35) 50%,rgba(255,227,156,.06) 53%,transparent 58%);
+  transform: translateX(-135%) rotate(-8deg);
+  animation: sidebar-heritage-glint 9s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+.sidebar-heritage-emblem { isolation: isolate; }
+@keyframes sidebar-heritage-glint {
+  0%, 24% { transform: translateX(-135%) rotate(-8deg); }
+  40% { transform: translateX(135%) rotate(-8deg); }
+  100% { transform: translateX(135%) rotate(-8deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-heritage-emblem::after { animation: none; opacity: 0; }
+}
