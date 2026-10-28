@@ -2,7 +2,7 @@ name: Windows installer (reviewed public source)
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/official-v1-0-0-candidate]
     paths:
       - '.github/workflows/windows-build.yml'
       - 'src/**'
