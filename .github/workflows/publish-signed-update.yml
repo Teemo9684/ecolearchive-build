@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: "Type PUBLISH after checking installer and version"
+        description: "Type BUILD to create a signed DRAFT release for testing"
         required: true
         type: string
 
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   signed_update:
-    if: ${{ inputs.confirmation == 'PUBLISH' }}
+    if: ${{ inputs.confirmation == 'BUILD' }}
     runs-on: windows-2022
     timeout-minutes: 70
     environment: windows-updates
@@ -82,8 +82,7 @@ jobs:
           $exe = "EcoleArchive-$($cfg.version)-x64-setup.exe"
           gh release create $tag "$dir/$exe" "$dir/$exe.sig" "$dir/latest.json" -R Teemo9684/ecolearchive-updates --title "EcoleArchive $tag" --notes "تحديث منظومة التسيير الإداري والأرشيف الرقمي" --draft
           if ($LASTEXITCODE -ne 0) { throw 'Creating draft release failed' }
-          gh release edit $tag -R Teemo9684/ecolearchive-updates --draft=false
-          if ($LASTEXITCODE -ne 0) { throw 'Publishing release failed; draft remains for review' }
+          Write-Host 'Signed release uploaded as DRAFT. Verify installer and metadata before publishing.'
       - uses: actions/upload-artifact@v4
         with:
           name: EcoleArchive-signed-update
