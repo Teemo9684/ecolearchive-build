@@ -60,7 +60,8 @@ export function NativeWordComposer() {
         const file=new File([decode64(encoded)],selected,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
         await readApprovedTemplate(file);
         const names=extractApprovedDocxFields(await bytesOf(file));
-        // Ordinary DOCX files are valid templates too. If no placeholders exist,\n        // offer preview/save/print with the original layout unchanged.
+        // Ordinary DOCX files are valid templates too. If no placeholders exist,
+        // offer preview/save/print with the original layout unchanged.
         if(!active)return;
         const auto:Record<string,string>={
           "المدرسة":settings.schoolName,"المدينة":settings.city,"الولاية":settings.wilaya,
@@ -78,7 +79,8 @@ export function NativeWordComposer() {
     if(!source)throw Error("اختر نوع الوثيقة");
     const missing=fields.find(k=>!values[k]?.trim());
     if(missing)throw Error("أكمل الحقل: "+missing);
-    if(fields.length===0) return new File([await bytesOf(source)], selected, {type:source.type});\n    return renderApprovedDocxFile(source,values,selected.replace(/\.docx$/i,""));
+    if(fields.length===0) return new File([await bytesOf(source)], selected, {type:source.type});
+    return renderApprovedDocxFile(source,values,selected.replace(/\.docx$/i,""));
   };
   const preserveRecipient=()=>{
     const r=values["المرسل_إليه"]?.trim();
