@@ -9,11 +9,8 @@ import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
 import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { SchoolEmblem } from "./SchoolEmblem";
 import { LovableSchoolLogo } from "./LovableSchoolLogo";
-// Resolve the original uploaded PNG when restored during Windows build.
-const approvedLogoAssets = import.meta.glob("/src/assets/school-logo.png", { eager: true, query: "?url", import: "default" });
-const approvedLogo = approvedLogoAssets["/src/assets/school-logo.png"] as string | undefined;
+import approvedLogo from "@/assets/school-logo.png";
 import packageInfo from "../../../package.json";
 import { isDesktopRuntime } from "@/lib/db/desktop";
 
@@ -73,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <button className="absolute end-3 top-3 md:hidden" onClick={() => setOpen(false)} aria-label="إغلاق"><X className="h-5 w-5" /></button>
         <div className="flex flex-col items-center px-4 pb-4 pt-6 text-center">
           <div className="emblem-ring relative rounded-full p-1">
-            {approvedLogo ? <LovableSchoolLogo logo={approvedLogo} /> : <SchoolEmblem className="block h-28 w-28 md:h-32 md:w-32" />}
+            <LovableSchoolLogo logo={approvedLogo} />
           </div>
           <div className="mt-2 font-display text-[16px] font-bold leading-snug">منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
           <div className="gold-rule header-gold-shimmer mt-4 w-3/4 opacity-70" />
