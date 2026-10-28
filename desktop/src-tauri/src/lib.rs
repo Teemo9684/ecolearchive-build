@@ -427,7 +427,9 @@ fn user_word_template_folder(app: tauri::AppHandle) -> Result<String, String> {
 fn print_docx_with_windows_dialog(path: &std::path::Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Controls::Dialogs::{PrintDlgW, PRINTDLGW, DEVNAMES, CommDlgExtendedError};
-    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock, GlobalFree};
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+    #[link(name = "kernel32")]
+    unsafe extern "system" { fn GlobalFree(memory: *mut std::ffi::c_void) -> *mut std::ffi::c_void; }
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
