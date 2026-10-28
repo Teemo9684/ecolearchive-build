@@ -323,7 +323,7 @@
 @keyframes emblem-shine { 0%,60% { transform: translateX(0) rotate(20deg); } 100% { transform: translateX(320px) rotate(20deg); } }
 @media (prefers-reduced-motion: reduce) { .emblem-shine { animation: none; opacity: 0; } }
 
-/* Approved school-logo sweep once every twelve seconds. */
+/* Approved school-logo sweep over gold pixels only, once every 4 seconds. */
 .logo-glow {
   filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-gold, #d5ac61) 45%, transparent))
           drop-shadow(0 6px 10px oklch(0 0 0 / 45%));
