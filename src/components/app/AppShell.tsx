@@ -2,7 +2,7 @@ import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Home, Plus, Inbox, Send, FolderOpen, Users, Package, TrendingUp, BarChart3,
+  Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
   Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
@@ -10,6 +10,7 @@ import type { Correspondence } from "@/lib/db/types";
 import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-book.png";
+import packageInfo from "../../../package.json";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
 const NAV: NavItem[][] = [
@@ -20,6 +21,8 @@ const NAV: NavItem[][] = [
     { to: "/mail/outgoing", label: "البريد الصادر", icon: Send },
     { to: "/archive", label: "الأرشيف الرقمي", icon: FolderOpen },
     { to: "/employees", label: "عمال المؤسسة", icon: Users },
+    { to: "/teachers", label: "العمال التربويون", icon: GraduationCap },
+    { to: "/students", label: "شؤون التلاميذ", icon: Baby },
     { to: "/inventory", label: "الجرد المدرسي", icon: Package },
     { to: "/admin-files", label: "التنقيط والمردودية", icon: TrendingUp },
     { to: "/reports", label: "التقارير والإحصائيات", icon: BarChart3 },
@@ -95,7 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ))}
           <div className="mx-5 mt-2 border-t border-sidebar-border pt-2">
-            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول التطبيق — نسخة محلية</div>
+            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول البرنامج — الإصدار {packageInfo.version}</div>
           </div>
         </nav>
       </aside>
