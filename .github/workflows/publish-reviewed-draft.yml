@@ -1,11 +1,10 @@
-name: Publish verified v0.1.7 draft
+name: Publish verified v1.0.0 draft
 
 on:
   push:
-    branches: [main]
+    branches: [feature/official-v1-0-0-candidate]
     paths:
-      - '.release-requests/publish-v0.1.7.txt'
-      - '.github/workflows/publish-reviewed-draft.yml'
+      - '.release-requests/publish-v1.0.0.txt'
 
 permissions:
   contents: read
@@ -23,24 +22,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(<.release-requests/publish-v0.1.7.txt)" = "PUBLISH_V0.1.7_APPROVED"
+          test "$(<.release-requests/publish-v1.0.0.txt)" = "PUBLISH_V1.0.0_APPROVED"
           test -n "${GH_TOKEN:-}" || { echo "::error::Missing GH_RELEASE_TOKEN"; exit 1; }
-          gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,assets > release.json
+          gh release view v1.0.0 -R Teemo9684/ecolearchive-updates --json isDraft,assets > release.json
           jq -e '(.isDraft == true or .isDraft == false)' release.json
-          jq -e '([.assets[].name] | index("EcoleArchive-0.1.7-x64-setup.exe") != null and index("EcoleArchive-0.1.7-x64-setup.exe.sig") != null and index("latest.json") != null)' release.json
+          jq -e '([.assets[].name] | index("EcoleArchive-1.0.0-x64-setup.exe") != null and index("EcoleArchive-1.0.0-x64-setup.exe.sig") != null and index("latest.json") != null)' release.json
           mkdir draft
-          gh release download v0.1.7 -R Teemo9684/ecolearchive-updates --dir draft -p latest.json -p 'EcoleArchive-0.1.7-x64-setup.exe' -p 'EcoleArchive-0.1.7-x64-setup.exe.sig'
-          test "$(jq -r .version draft/latest.json)" = "0.1.7"
-          test "$(jq -r '.platforms["windows-x86_64"].signature' draft/latest.json)" = "$(cat draft/EcoleArchive-0.1.7-x64-setup.exe.sig)"
-          sha256sum draft/EcoleArchive-0.1.7-x64-setup.exe
-      - name: Publish ONLY v0.1.7
+          gh release download v1.0.0 -R Teemo9684/ecolearchive-updates --dir draft -p latest.json -p 'EcoleArchive-1.0.0-x64-setup.exe' -p 'EcoleArchive-1.0.0-x64-setup.exe.sig'
+          test "$(jq -r .version draft/latest.json)" = "1.0.0"
+          test "$(jq -r '.platforms["windows-x86_64"].signature' draft/latest.json)" = "$(cat draft/EcoleArchive-1.0.0-x64-setup.exe.sig)"
+          sha256sum draft/EcoleArchive-1.0.0-x64-setup.exe
+      - name: Publish ONLY v1.0.0
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
-          status=$(gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,url)
+          status=$(gh release view v1.0.0 -R Teemo9684/ecolearchive-updates --json isDraft,url)
           if [ "$(echo "$status" | jq -r .isDraft)" = "true" ]; then
-            gh release edit v0.1.7 -R Teemo9684/ecolearchive-updates --draft=false --latest
+            gh release edit v1.0.0 -R Teemo9684/ecolearchive-updates --draft=false --latest
           fi
-          gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,url
-          test "$(gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft | jq -r .isDraft)" = "false"
-          echo "v0.1.7 release published and verified"
+          gh release view v1.0.0 -R Teemo9684/ecolearchive-updates --json isDraft,url
+          test "$(gh release view v1.0.0 -R Teemo9684/ecolearchive-updates --json isDraft | jq -r .isDraft)" = "false"
+          echo "v1.0.0 release published and verified"
