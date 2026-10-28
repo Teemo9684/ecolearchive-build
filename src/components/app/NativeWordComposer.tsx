@@ -82,17 +82,17 @@ export function NativeWordComposer() {
     if(!source)throw Error("اختر نوع الوثيقة");
 
     if(fields.length===0) return new File([await bytesOf(source)], selected, {type:source.type});
-    const numbers=fields.filter(k=>/^(?:عدد_الوثائق|عدد_المرفقات)(?:_\\d+)?$/.test(k));
+    const numbers=fields.filter(k=>/^(?:عدد_الوثائق|عدد_المرفقات)(?:_\d+)?$/.test(k));
     const parseQuantity=(value:string)=>{
       const western=value.replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660))
         .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0)).trim();
       if(!western)return 0;
-      if(!/^\\d+$/.test(western))throw Error("عدد الوثائق والمرفقات يجب أن يكون عددًا صحيحًا");
+      if(!/^\d+$/.test(western))throw Error("عدد الوثائق والمرفقات يجب أن يكون عددًا صحيحًا");
       return Number(western);
     };
     const sum=numbers.reduce((total,k)=>total+parseQuantity(values[k]??""),0);
     const data={...values, ...(fields.includes("المجموع")?{"المجموع":String(sum)}:{})};
-    return renderApprovedDocxFile(source,data,selected.replace(/\\.docx$/i,""));
+    return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
