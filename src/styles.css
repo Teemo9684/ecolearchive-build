@@ -158,7 +158,7 @@
 @theme {
   --font-display: "El Messiri", "Cairo", system-ui, sans-serif;
   --animate-fade-up: fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  --animate-shine: shine 12s linear infinite;
+  --animate-shine: shine 4s linear infinite;
   @keyframes fade-up {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
@@ -323,7 +323,7 @@
 @keyframes emblem-shine { 0%,60% { transform: translateX(0) rotate(20deg); } 100% { transform: translateX(320px) rotate(20deg); } }
 @media (prefers-reduced-motion: reduce) { .emblem-shine { animation: none; opacity: 0; } }
 
-/* Approved school-logo sweep synchronised with the title's 12-second gold-text animation. */
+/* Approved school-logo sweep once every four seconds. */
 .logo-glow {
   filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-gold, #d5ac61) 45%, transparent))
           drop-shadow(0 6px 10px oklch(0 0 0 / 45%));
