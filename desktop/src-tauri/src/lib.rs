@@ -441,12 +441,13 @@ fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result
     {
         let path_text = path.to_string_lossy().to_string();
         let mut command = std::process::Command::new("powershell.exe");
-        command.args(["-NoProfile", "-NonInteractive", "-Command",
-            if print {
-                "Start-Process -FilePath $args[0] -Verb Print"
-            } else {
-                "Start-Process -FilePath $args[0]"
-            }, "--", &path_text]);
+        let escaped = path_text.replace('\'', "''");
+        let script = if print {
+            format!("Start-Process -FilePath '{}' -Verb Print", escaped)
+        } else {
+            format!("Start-Process -FilePath '{}'", escaped)
+        };
+        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
         let result = command.status().map_err(|e| format!("تعذر فتح Word: {e}"))?;
         if !result.success() { return Err("تعذر فتح الوثيقة في Word أو إرسالها للطابعة".into()); }
         Ok(())
