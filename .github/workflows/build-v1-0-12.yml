@@ -70,6 +70,8 @@ jobs:
           if-no-files-found: warn
       - name: Build offline frontend
         run: bun run desktop:build
+      - name: Generate Windows icons from restored school logo
+        run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
       - name: Compile desktop Rust
         working-directory: desktop/src-tauri
         run: cargo check
