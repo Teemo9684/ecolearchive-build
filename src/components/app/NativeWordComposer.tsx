@@ -75,7 +75,7 @@ export function NativeWordComposer() {
     if(!source)throw Error("اختر نوع الوثيقة");
     const missing=fields.find(k=>!values[k]?.trim());
     if(missing)throw Error("أكمل الحقل: "+missing);
-    return renderApprovedDocxFile(source,values,selected.replace(/\\.docx$/i,""));
+    return renderApprovedDocxFile(source,values,selected.replace(/\.docx$/i,""));
   };
   const preserveRecipient=()=>{
     const r=values["المرسل_إليه"]?.trim();
@@ -113,7 +113,7 @@ export function NativeWordComposer() {
     <label className="block text-sm font-medium">نوع الوثيقة
       <select className="field-select mt-2 block w-full" value={selected} disabled={busy||loading} onChange={e=>setSelected(e.target.value)}>
         <option value="">اختر نوع الوثيقة</option>
-        {templates.map(t=><option value={t.name} key={t.name}>{t.name.replace(/\\.docx$/i,"")}</option>)}
+        {templates.map(t=><option value={t.name} key={t.name}>{t.name.replace(/\.docx$/i,"")}</option>)}
       </select>
     </label>
     {!loading&&!templates.length&&<p className="text-sm text-muted-foreground">لا توجد قوالب Word بعد في Documents / EcoleArchive / قوالب الوثائق. ضع ملفات DOCX هناك؛ ستظهر عند دخول القسم.</p>}
