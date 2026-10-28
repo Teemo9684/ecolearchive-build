@@ -463,7 +463,7 @@ fn print_docx_with_windows_dialog(path: &std::path::Path) -> Result<(), String> 
     // Word's registered printto verb receives the printer explicitly. No PowerShell or visible console.
     let pathname: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let action: Vec<u16> = "printto".encode_utf16().chain(std::iter::once(0)).collect();
-    let args: Vec<u16> = format!("\\\"{}\\\"", selected.replace('"', ""))
+    let args: Vec<u16> = format!("\"{}\"", selected.replace('"', ""))
         .encode_utf16().chain(std::iter::once(0)).collect();
     let result = unsafe {
         ShellExecuteW(std::ptr::null_mut(), action.as_ptr(), pathname.as_ptr(),
