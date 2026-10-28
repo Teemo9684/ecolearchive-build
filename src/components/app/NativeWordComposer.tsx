@@ -37,7 +37,7 @@ export function NativeWordComposer() {
       if (approved.format === "docx" && !names.length) throw new Error("ما لقيناش الحقول. استعمل {اسم_الحقل} داخل قالب Word");
       setFormat(approved.format);
       setSource(file); setTitle(file.name.replace(/\.(docx|pdf)$/i,"")); setFields(names);
-      setValues(Object.fromEntries(names.map(k => [k, k === "المدرسة" ? settings.schoolName : k === "التاريخ" ? new Date().toLocaleDateString("fr-DZ") : ""])));
+      setValues(Object.fromEntries(names.map(k => [k, ({ "المدرسة": settings.schoolName, "المدينة": settings.city, "الولاية": settings.wilaya, "المديرية": settings.directorate, "السنة_الدراسية": settings.currentYear, "التاريخ": new Date().toLocaleDateString("fr-DZ") } as Record<string, string>)[k] ?? ""])));
     } catch(e) { setSource(null); setFields([]); toast.error(String(e instanceof Error ? e.message : e)); }
   };
   const rememberRecipient = (value: string) => {
@@ -67,9 +67,9 @@ export function NativeWordComposer() {
           tags: [], description: "نسخة من القالب الأصلي: " + source.name,
           date: new Date().toISOString().slice(0,10), relatedType: null, relatedId: null
         });
-        if(fields.includes("المرسل_إليه")) rememberRecipient(values["المرسل_إليه"]);
         // Save silently; archive list is the confirmation.
       } else downloadBlob(output,output.name);
+      if(fields.includes("المرسل_إليه")) rememberRecipient(values["المرسل_إليه"]);
     } catch(e) {toast.error(String(e instanceof Error?e.message:e));}
     finally {setBusy(false);}
   };
