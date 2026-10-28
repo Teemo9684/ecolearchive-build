@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.release-requests/publish-v0.1.7.txt'
+      - '.github/workflows/publish-reviewed-draft.yml'
 
 permissions:
   contents: read
@@ -25,7 +26,7 @@ jobs:
           test "$(<.release-requests/publish-v0.1.7.txt)" = "PUBLISH_V0.1.7_APPROVED"
           test -n "${GH_TOKEN:-}" || { echo "::error::Missing GH_RELEASE_TOKEN"; exit 1; }
           gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,assets > release.json
-          jq -e '.isDraft == true' release.json
+          jq -e '(.isDraft == true or .isDraft == false)' release.json
           jq -e '([.assets[].name] | index("EcoleArchive-0.1.7-x64-setup.exe") != null and index("EcoleArchive-0.1.7-x64-setup.exe.sig") != null and index("latest.json") != null)' release.json
           mkdir draft
           gh release download v0.1.7 -R Teemo9684/ecolearchive-updates --dir draft -p latest.json -p 'EcoleArchive-0.1.7-x64-setup.exe' -p 'EcoleArchive-0.1.7-x64-setup.exe.sig'
@@ -36,5 +37,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
-          gh release edit v0.1.7 -R Teemo9684/ecolearchive-updates --draft=false --latest
-          gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,isLatest,url
+          status=$(gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,url)
+          if [ "$(echo "$status" | jq -r .isDraft)" = "true" ]; then
+            gh release edit v0.1.7 -R Teemo9684/ecolearchive-updates --draft=false --latest
+          fi
+          gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft,url
+          test "$(gh release view v0.1.7 -R Teemo9684/ecolearchive-updates --json isDraft | jq -r .isDraft)" = "false"
+          echo "v0.1.7 release published and verified"
