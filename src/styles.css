@@ -316,3 +316,9 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar-heritage-emblem::after { animation: none; opacity: 0; }
 }
+
+/* Offline Lovable school emblem — soft gold ring and accessible shine */
+.emblem-ring { box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold, #c9a55d) 60%, transparent), 0 0 32px -7px color-mix(in oklab, var(--gold, #c9a55d) 55%, transparent); }
+.emblem-shine { animation: emblem-shine 7s ease-in-out infinite; }
+@keyframes emblem-shine { 0%,60% { transform: translateX(0) rotate(20deg); } 100% { transform: translateX(320px) rotate(20deg); } }
+@media (prefers-reduced-motion: reduce) { .emblem-shine { animation: none; opacity: 0; } }
