@@ -39,6 +39,9 @@ export function NativeWordComposer() {
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
   });
+  const [departments,setDepartments]=useState<string[]>(()=>{
+    try{return JSON.parse(localStorage.getItem("ecolearchive-departments")||"[]") as string[];}catch{return [];}
+  });
   useEffect(()=>{
     if(!isDesktopRuntime()){setLoading(false);return;}
     let mounted=true;
@@ -82,11 +85,16 @@ export function NativeWordComposer() {
     if(fields.length===0) return new File([await bytesOf(source)], selected, {type:source.type});
     return renderApprovedDocxFile(source,values,selected.replace(/\.docx$/i,""));
   };
-  const preserveRecipient=()=>{
-    const r=values["المرسل_إليه"]?.trim();
-    if(!r||recipients.includes(r))return;
-    const next=[...recipients,r].sort((a,b)=>a.localeCompare(b,"ar"));
-    setRecipients(next);try{localStorage.setItem("ecolearchive-recipients",JSON.stringify(next));}catch{}
+  const preserveDirectoryEntries=()=>{
+    const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
+      const value=values[field]?.trim();
+      if(!value||old.includes(value))return;
+      const next=[...old,value].sort((a,b)=>a.localeCompare(b,"ar"));
+      setter(next);
+      try{localStorage.setItem(key,JSON.stringify(next));}catch{}
+    };
+    store("ecolearchive-recipients","المرسل_إليه",recipients,setRecipients);
+    store("ecolearchive-departments","المصلحة",departments,setDepartments);
   };
   const action=async(mode:"preview"|"save"|"print")=>{
     if(busy)return;
@@ -100,7 +108,7 @@ export function NativeWordComposer() {
         if(prepared[0]?.tooLarge)throw Error("حجم الوثيقة يتجاوز الحد المسموح");
         if(prepared[0]?.duplicateOf)throw Error("هذه الوثيقة موجودة بالفعل في الأرشيف");
         await importPrepared(prepared,{categoryId:category,subcategory:"",academicYear:settings.currentYear,tags:[],description:"وثيقة إدارية: "+selected,date:new Date().toISOString().slice(0,10),relatedType:null,relatedId:null});
-        preserveRecipient();
+        preserveDirectoryEntries();
         // Save silently; the archive is the single source of truth.
       }else{
         const encoded=encode64(new Uint8Array(await bytesOf(output)));
@@ -108,7 +116,7 @@ export function NativeWordComposer() {
         // Native Word opens the resulting DOCX without changing the source template.
         await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:mode==="print"});
         if(mode==="preview")setPreview("opened");
-        preserveRecipient();
+        preserveDirectoryEntries();
       }
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
     finally{setBusy(false);}
@@ -125,10 +133,11 @@ export function NativeWordComposer() {
     {source&&<>
       <div className="grid gap-4 md:grid-cols-2">
         {fields.map(key=><label key={key} className="block text-sm font-medium">{key.replaceAll("_"," ")}
-          <input list={key==="المرسل_إليه"?"native-recipients":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+          <input list={key==="المرسل_إليه"?"native-recipients":key==="المصلحة"?"native-departments":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
         </label>)}
       </div>
       <datalist id="native-recipients">{recipients.map(r=><option key={r} value={r}/>)}</datalist>
+      <datalist id="native-departments">{departments.map(r=><option key={r} value={r}/>)}</datalist>
       <div className="flex flex-wrap gap-3">
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("preview")}>معاينة</button>
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
