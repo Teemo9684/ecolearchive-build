@@ -303,6 +303,9 @@
   transform: translateX(-135%) rotate(-8deg);
   animation: sidebar-heritage-glint 9s ease-in-out infinite;
   mix-blend-mode: screen;
+  /* Restrict the sweep to the gilded outer ring, not the historical portrait. */
+  -webkit-mask-image: radial-gradient(circle, transparent 58%, #000 68%, #000 89%, transparent 99%);
+  mask-image: radial-gradient(circle, transparent 58%, #000 68%, #000 89%, transparent 99%);
 }
 .sidebar-heritage-emblem { isolation: isolate; }
 @keyframes sidebar-heritage-glint {
