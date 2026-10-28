@@ -42,11 +42,14 @@ export function NativeWordComposer() {
   useEffect(()=>{
     if(!isDesktopRuntime()){setLoading(false);return;}
     let mounted=true;
-    void window.__TAURI_INTERNALS__!.invoke("list_user_word_templates").then(v=>{
+    const scan=()=>void window.__TAURI_INTERNALS__!.invoke("list_user_word_templates").then(v=>{
       if(mounted)setTemplates(v as StoredTemplate[]);
     }).catch(e=>{if(mounted)toast.error("تعذر قراءة القوالب: "+String(e));})
       .finally(()=>{if(mounted)setLoading(false);});
-    return ()=>{mounted=false;};
+    scan();
+    // Refresh automatically whenever Windows focus returns, with no extra controls.
+    window.addEventListener("focus",scan);
+    return ()=>{mounted=false;window.removeEventListener("focus",scan);};
   },[]);
   useEffect(()=>{if(!selected||!isDesktopRuntime()){setSource(null);setFields([]);setPreview(null);return;}
     let active=true;
@@ -96,7 +99,7 @@ export function NativeWordComposer() {
         if(prepared[0]?.duplicateOf)throw Error("هذه الوثيقة موجودة بالفعل في الأرشيف");
         await importPrepared(prepared,{categoryId:category,subcategory:"",academicYear:settings.currentYear,tags:[],description:"وثيقة إدارية: "+selected,date:new Date().toISOString().slice(0,10),relatedType:null,relatedId:null});
         preserveRecipient();
-        toast.success("تم حفظ الوثيقة في الأرشيف");
+        // Save silently; the archive is the single source of truth.
       }else{
         const encoded=encode64(new Uint8Array(await bytesOf(output)));
         if(!isDesktopRuntime())throw Error("المعاينة والطباعة تتطلب نسخة Windows");
