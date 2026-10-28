@@ -16,11 +16,11 @@ function minimalDocx(text: string) {
   return zip.generate({type:"uint8array"});
 }
 describe("native DOCX generation", () => {
-  it("refuses templates without fillable fields", () => {
-    expect(() => renderApprovedDocx(minimalDocx("نص ثابت"), {})).toThrow();
+  it("accepts ordinary Word templates without fillable fields", () => {
+    expect(() => renderApprovedDocx(minimalDocx("نص ثابت"), {})).not.toThrow();
   });
-  it("rejects empty fields even when provided as blank strings", () => {
-    expect(() => renderApprovedDocx(minimalDocx("{recipient}"), {recipient: "  "})).toThrow();
+  it("allows blank fields for preview, save and print", () => {
+    expect(() => renderApprovedDocx(minimalDocx("{recipient}"), {recipient: "  "})).not.toThrow();
   });
   it("discovers field names in the header as well as body", () => {
     const zip = new PizZip(minimalDocx("{body}"));
@@ -46,7 +46,9 @@ describe("native DOCX generation", () => {
     expect(opened.file("word/document.xml")!.asText()).toContain("مديرية التربية");
     expect(new Uint8Array(original)).toEqual(copyBefore);
   });
-  it("rejects missing required values", () => {
-    expect(() => renderApprovedDocx(minimalDocx("{recipient}"), {})).toThrow();
+  it("leaves unfilled placeholders blank without blocking generation", async () => {
+    const output = renderApprovedDocx(minimalDocx("{recipient}"), {});
+    const zip = new PizZip(new Uint8Array(await readBlob(output)));
+    expect(zip.file("word/document.xml")!.asText()).not.toContain("{recipient}");
   });
 });
