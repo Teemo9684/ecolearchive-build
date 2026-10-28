@@ -36,7 +36,7 @@ jobs:
           $cargo = (Select-String -Path desktop/src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
           if ($npm -ne "1.0.12" -or $tauri -ne "1.0.12" -or $cargo -ne "1.0.12") { throw "Version mismatch" }
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
       - name: Test archive
         run: bun run test
       - name: Build offline frontend
