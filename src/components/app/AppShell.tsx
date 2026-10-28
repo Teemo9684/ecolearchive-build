@@ -11,6 +11,7 @@ import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-book.png";
 import packageInfo from "../../../package.json";
+import { invoke } from "@tauri-apps/api/core";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
 const NAV: NavItem[][] = [
@@ -44,10 +45,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [q, setQ] = useState("");
+  const [installedVersion, setInstalledVersion] = useState(packageInfo.version);
   const fr = settings.locale === "fr";
   const home = path === "/";
 
   useEffect(() => { setDark(localStorage.getItem("ui-theme") === "dark"); }, []);
+  useEffect(() => { if ("__TAURI_INTERNALS__" in window) void invoke<string>("installed_app_version").then(setInstalledVersion).catch(() => {}); }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
 
@@ -98,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ))}
           <div className="mx-5 mt-2 border-t border-sidebar-border pt-2">
-            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول البرنامج — الإصدار {packageInfo.version}</div>
+            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول البرنامج — الإصدار {installedVersion}</div>
           </div>
         </nav>
       </aside>
