@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/official-v1-0-0-candidate]
     paths:
-      - '.release-requests/build-v1.0.1.txt'
+      - '.release-requests/build-v1.0.2.txt'
   workflow_dispatch:
     inputs:
       confirmation:
@@ -27,10 +27,10 @@ jobs:
         if: github.event_name == 'push'
         shell: pwsh
         run: |
-          $request = (Get-Content '.release-requests/build-v1.0.1.txt' -Raw).Trim()
-          if ($request -ne 'BUILD_V1.0.1_DRAFT') { throw 'Incorrect build authorization' }
+          $request = (Get-Content '.release-requests/build-v1.0.2.txt' -Raw).Trim()
+          if ($request -ne 'BUILD_V1.0.2_DRAFT') { throw 'Incorrect build authorization' }
           $cfg = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
-          if ($cfg.version -ne '1.0.1') { throw 'Unexpected version for candidate request' }
+          if ($cfg.version -ne '1.0.2') { throw 'Unexpected version for candidate request' }
       - name: Verify secrets and release version
         shell: pwsh
         env:
