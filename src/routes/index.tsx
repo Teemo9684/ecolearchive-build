@@ -1,3 +1,4 @@
+import "@fontsource/aref-ruqaa/700.css";
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
