@@ -3,6 +3,14 @@ name: Windows installer (reviewed public source)
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/windows-build.yml'
+      - 'src/**'
+      - 'desktop/**'
+      - 'public/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'bunfig.toml'
   push:
     branches: [main, feature/official-v1-0-0-candidate]
     paths:
