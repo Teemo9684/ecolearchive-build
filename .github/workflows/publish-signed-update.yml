@@ -62,6 +62,14 @@ jobs:
             $encoded = Get-Content -Raw ($item + '.b64')
             [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), [Convert]::FromBase64String($encoded.Trim()))
           }
+          if (Test-Path 'src/assets/school-logo.png.b64') {
+            $logoBase64 = (Get-Content 'src/assets/school-logo.png.b64' -Raw).Trim()
+            $logoBytes = [Convert]::FromBase64String($logoBase64)
+            $sha = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($logoBytes)).ToLowerInvariant()
+            if ($sha -ne 'e041842461eb767242d564e2119311c16c3239c1ca17fbf1444273d9f45f760d') { throw 'Original Lovable logo SHA256 mismatch' }
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) 'src/assets/school-logo.png'), $logoBytes)
+          }
+
       - name: Install and compile frontend
         shell: pwsh
         run: |
