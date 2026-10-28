@@ -6,10 +6,35 @@ import { downloadBlob } from "@/lib/files";
 import { importPrepared, prepareFiles } from "@/lib/services/documents";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { ArchiveCategory } from "@/lib/db/types";
+import { isDesktopRuntime } from "@/lib/db/desktop";
 
 /** Pilot: user-provided approved DOCX, no reconstructed HTML layout. */
 export function NativeWordComposer() {
   const settings = useSettings();
+  const [folderPath, setFolderPath] = useState("");
+  const [localTemplates, setLocalTemplates] = useState<{name: string; path: string}[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const refreshTemplates = async () => {
+    if (!isDesktopRuntime()) return;
+    try {
+      const native = window.__TAURI_INTERNALS__!.invoke;
+      const [folder, names] = await Promise.all([native("user_word_template_folder"), native("list_user_word_templates")]);
+      setFolderPath(folder as string);
+      setLocalTemplates(names as {name: string; path: string}[]);
+    } catch (error) { toast.error("تعذر قراءة مجلد القوالب: " + String(error)); }
+  };
+  useEffect(() => { void refreshTemplates(); }, []);
+  const selectStoredTemplate = async (name: string) => {
+    setSelectedTemplate(name);
+    if (!name) return;
+    try {
+      const encoded = await window.__TAURI_INTERNALS__!.invoke("read_user_word_template", { name }) as string;
+      const binary = atob(encoded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      await loadFile(new File([bytes], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    } catch (error) { toast.error("تعذر فتح قالب Word: " + String(error)); }
+  };
   const { data: categories } = useCollection<ArchiveCategory>("archiveCategories");
   const [categoryId, setCategoryId] = useState("");
   const [source, setSource] = useState<File | null>(null);
@@ -74,7 +99,14 @@ export function NativeWordComposer() {
     finally {setBusy(false);}
   };
   return <section className="panel mb-5 p-5" dir="rtl">
-    <h2 className="text-lg font-bold mb-2">قوالب الوثائق المعتمدة — تجريبي</h2>
+    <h2 className="text-lg font-bold mb-2">قوالب الوثائق الإدارية</h2>
+    {isDesktopRuntime() && <div className="mb-4 rounded-lg border bg-card p-3 space-y-3">
+      <p className="font-semibold">قوالب Word التي تصممها على الكمبيوتر</p>
+      <p className="text-xs text-muted-foreground">ضع ملفات DOCX المصممة في هذا المجلد ثم اضغط تحديث القائمة. القالب الأصلي يبقى محفوظًا دون تعديل.</p>
+      <div dir="ltr" className="select-all break-all text-xs font-mono">{folderPath || "Documents / EcoleArchive / قوالب الوثائق"}</div>
+      <div className="flex flex-wrap gap-2"><button type="button" className="rounded-md border px-3 py-2" onClick={() => void refreshTemplates()}>تحديث قائمة القوالب</button><button type="button" className="rounded-md border px-3 py-2" onClick={() => { if(folderPath) navigator.clipboard.writeText(folderPath).then(() => toast.success("تم نسخ المسار")).catch(() => toast.error("تعذر نسخ المسار")); }}>نسخ مسار المجلد</button></div>
+      <select aria-label="اختيار قالب من Documents" className="field-select w-full" value={selectedTemplate} onChange={e => void selectStoredTemplate(e.target.value)}><option value="">اختر قالب Word من المجلد</option>{localTemplates.map(v=><option key={v.name} value={v.name}>{v.name}</option>)}</select>
+    </div>}
     <p className="text-sm text-muted-foreground mb-4">قالب Word يقبل تعبئة الحقول، وملف PDF يحفظ كما هو دون تعديل. المعاينة والطباعة الأصلية ما زالت قيد الاختبار.</p>
     <label className="block mb-3 text-sm">ملف القالب Word أو PDF
       <input type="file" accept=".docx,.pdf" className="block w-full mt-1" onChange={e=>void loadFile(e.target.files?.[0])}/>
