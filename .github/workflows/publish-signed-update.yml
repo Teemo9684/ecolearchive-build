@@ -24,16 +24,17 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "Missing TAURI_SIGNING_PRIVATE_KEY" }
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { throw "Missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
-          if (-not $env:GH_RELEASE_TOKEN) { throw "Missing GH_RELEASE_TOKEN" }
+          if (-not $env:GH_TOKEN) { throw "Missing GH_RELEASE_TOKEN" }
           $cfg = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
           if (-not ($cfg.version -match '^\d+\.\d+\.\d+$')) { throw "Invalid release version" }
           $tag = 'v' + $cfg.version
-          gh release view $tag -R Teemo9684/ecolearchive-updates 2>$null
+          $existing = gh api "repos/Teemo9684/ecolearchive-updates/releases/tags/$tag" --silent 2>&1
           if ($LASTEXITCODE -eq 0) { throw "Release already exists: $tag. Increase version first." }
+          if ($existing -notmatch '404') { throw "Cannot verify release availability. Check GH_RELEASE_TOKEN permissions and repository access." }
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@stable
         with:
