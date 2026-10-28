@@ -1,0 +1,91 @@
+name: Publish verified EcoleArchive v1.0.12 signed update
+on:
+  push:
+    branches: [feature/v1-0-12-gold-only-shine]
+    paths:
+      - '.github/workflows/publish-v1-0-12.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.repository == 'Teemo9684/ecolearchive-build'
+    runs-on: ubuntu-latest
+    environment: windows-updates
+    concurrency:
+      group: official-v1-0-12-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify expected version and locate successful signed build
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" || { echo "::error::Missing GH_RELEASE_TOKEN"; exit 1; }
+          test "$(node -p "require('./package.json').version")" = "1.0.12"
+          test "$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")" = "1.0.12"
+          gh run list -R Teemo9684/ecolearchive-build --workflow build-v1-0-12.yml --branch feature/v1-0-12-gold-only-shine --status success --limit 10 --json databaseId,headSha,conclusion > /tmp/successful-runs.json
+          RUN_ID="$(jq -r '.[0].databaseId // empty' /tmp/successful-runs.json)"
+          test -n "$RUN_ID" || { echo "::error::No successful v1.0.12 Windows build"; exit 1; }
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          echo "Using successful signed Windows build run $RUN_ID"
+      - name: Download signed Windows artifacts from the successful build
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verified
+          gh run download "$RUN_ID" -R Teemo9684/ecolearchive-build --name EcoleArchive-1.0.12-signed-candidate --dir verified
+          find verified -type f -maxdepth 5 -printf '%p %s bytes\n'
+      - name: Validate installer, matching signature and Tauri update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t EXES < <(find verified -type f -iname '*1.0.12*.exe')
+          test "${#EXES[@]}" -eq 1 || { echo "::error::Expected exactly one v1.0.12 installer"; exit 1; }
+          EXE="${EXES[0]}"
+          test "$(stat -c%s "$EXE")" -gt 1000000
+          test -s "$EXE.sig"
+          MANIFEST="$(find verified -type f -name latest.json | head -1)"
+          test -n "$MANIFEST" && test -s "$MANIFEST"
+          mkdir -p release-verified
+          cp "$EXE" release-verified/EcoleArchive-1.0.12-x64-setup.exe
+          cp "$EXE.sig" release-verified/EcoleArchive-1.0.12-x64-setup.exe.sig
+          cp "$MANIFEST" release-verified/latest.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const dir="release-verified";
+            const m=JSON.parse(fs.readFileSync(dir+"/latest.json","utf8"));
+            const signature=fs.readFileSync(dir+"/EcoleArchive-1.0.12-x64-setup.exe.sig","utf8").trim();
+            const p=m.platforms?.["windows-x86_64"];
+            const url="https://github.com/Teemo9684/ecolearchive-updates/releases/download/v1.0.12/EcoleArchive-1.0.12-x64-setup.exe";
+            if(m.version!=="1.0.12" || !p || p.signature!==signature || p.url!==url || signature.length<50) process.exit(2);
+          '
+          sha256sum release-verified/* | tee release-sha256.txt
+      - name: Create draft release and upload exact verified signed bytes
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO=Teemo9684/ecolearchive-updates
+          if gh release view v1.0.12 -R "$REPO" >/dev/null 2>&1; then
+            echo "::error::v1.0.12 already exists. Refusing overwrite of release assets."
+            exit 1
+          fi
+          gh release create v1.0.12 release-verified/EcoleArchive-1.0.12-x64-setup.exe release-verified/EcoleArchive-1.0.12-x64-setup.exe.sig release-verified/latest.json -R "$REPO" --draft --title 'EcoleArchive v1.0.12' --notes 'تحسين لمعان الشعار الذهبي في الصفحة الرئيسية دون تغيير وظائف المنظومة.'
+          gh release view v1.0.12 -R "$REPO" --json isDraft,assets > /tmp/release.json
+          jq -e '.isDraft == true and ([.assets[].name] | (index("EcoleArchive-1.0.12-x64-setup.exe") != null and index("EcoleArchive-1.0.12-x64-setup.exe.sig") != null and index("latest.json") != null))' /tmp/release.json
+      - name: Publish signed update after draft verification
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit v1.0.12 -R Teemo9684/ecolearchive-updates --draft=false --latest
+          gh release view v1.0.12 -R Teemo9684/ecolearchive-updates --json isDraft,url,assets | tee published.json
+          jq -e '.isDraft == false' published.json
