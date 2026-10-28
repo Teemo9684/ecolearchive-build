@@ -336,7 +336,7 @@
     color-mix(in oklab, var(--color-gold, #d5ac61) 40%, transparent) 52.5%,
     transparent 57%);
   background-size: 200% 100%;
-  animation: lovable-school-shine 12s linear infinite;
+  animation: lovable-school-shine 4s linear infinite;
   mix-blend-mode: screen;
   pointer-events: none;
 }
