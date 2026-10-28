@@ -439,17 +439,21 @@ fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result
     fs::write(&path, bytes).map_err(|e|e.to_string())?;
     #[cfg(target_os="windows")]
     {
-        let path_text = path.to_string_lossy().to_string();
-        let mut command = std::process::Command::new("powershell.exe");
-        let escaped = path_text.replace('\'', "''");
-        let script = if print {
-            format!("Start-Process -FilePath '{}' -Verb Print", escaped)
-        } else {
-            format!("Start-Process -FilePath '{}'", escaped)
+        // ShellExecuteW opens the registered DOCX handler directly with no PowerShell
+        // or visible console window. Word receives a generated temporary copy only.
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let path_w: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let verb: Vec<u16> = std::ffi::OsStr::new(if print { "print" } else { "open" })
+            .encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe {
+            ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), path_w.as_ptr(),
+                std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
         };
-        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
-        let result = command.status().map_err(|e| format!("تعذر فتح Word: {e}"))?;
-        if !result.success() { return Err("تعذر فتح الوثيقة في Word أو إرسالها للطابعة".into()); }
+        if (result as isize) <= 32 {
+            return Err(format!("تعذر فتح Word أو تشغيل الطباعة (Windows error {})", result as isize));
+        }
         Ok(())
     }
     #[cfg(not(target_os="windows"))]
