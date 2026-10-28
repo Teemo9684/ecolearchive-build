@@ -70,6 +70,14 @@ jobs:
             [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) 'src/assets/school-logo.png'), $logoBytes)
           }
 
+      - name: Create gold-only mask for the original logo
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check Pillow
+          if ($LASTEXITCODE -ne 0) { throw 'Pillow install failed' }
+          python scripts/generate-gold-mask.py
+          if ($LASTEXITCODE -ne 0) { throw 'Gold-only logo mask failed' }
+
       - name: Install and compile frontend
         shell: pwsh
         run: |
