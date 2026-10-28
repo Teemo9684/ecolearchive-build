@@ -423,6 +423,58 @@ fn user_word_template_folder(app: tauri::AppHandle) -> Result<String, String> {
 
 /** Work on a generated copy in the temporary directory; the user's approved
  * Documents template is never opened for editing or overwritten. */
+#[cfg(target_os="windows")]
+fn print_docx_with_windows_dialog(path: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Controls::Dialogs::{PrintDlgW, PRINTDLGW, DEVNAMES, CommDlgExtendedError};
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock, GlobalFree};
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    let mut dialog: PRINTDLGW = unsafe { std::mem::zeroed() };
+    dialog.lStructSize = std::mem::size_of::<PRINTDLGW>() as u32;
+    dialog.nCopies = 1;
+    dialog.Flags = 0x0000_0008 | 0x0008_0000; // PD_NOSELECTION | PD_DISABLEPRINTTOFILE
+    let accepted = unsafe { PrintDlgW(&mut dialog) } != 0;
+    if !accepted {
+        let code = unsafe { CommDlgExtendedError() };
+        if code != 0 { return Err(format!("تعذر فتح نافذة الطباعة (رمز {})", code)); }
+        return Ok(()); // user cancelled; no printing
+    }
+
+    let printer = unsafe {
+        if dialog.hDevNames.is_null() { None } else {
+            let memory = GlobalLock(dialog.hDevNames);
+            if memory.is_null() { None } else {
+                let names = &*(memory as *const DEVNAMES);
+                let wide = (memory as *const u16).add(names.wDeviceOffset as usize);
+                let len = (0..1024).position(|i| *wide.add(i) == 0);
+                let selected = len.map(|n| String::from_utf16_lossy(std::slice::from_raw_parts(wide, n)));
+                GlobalUnlock(dialog.hDevNames);
+                selected
+            }
+        }
+    };
+    unsafe {
+        if !dialog.hDevNames.is_null() { GlobalFree(dialog.hDevNames); }
+        if !dialog.hDevMode.is_null() { GlobalFree(dialog.hDevMode); }
+    }
+    let selected = printer.filter(|n| !n.trim().is_empty()).ok_or("لم نتمكن من تحديد الطابعة المختارة")?;
+    // Word's registered printto verb receives the printer explicitly. No PowerShell or visible console.
+    let pathname: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let action: Vec<u16> = "printto".encode_utf16().chain(std::iter::once(0)).collect();
+    let args: Vec<u16> = format!("\\\"{}\\\"", selected.replace('"', ""))
+        .encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(std::ptr::null_mut(), action.as_ptr(), pathname.as_ptr(),
+            args.as_ptr(), std::ptr::null(), SW_HIDE)
+    };
+    if (result as isize) <= 32 {
+        return Err(format!("تعذر إرسال الوثيقة للطابعة المختارة (Windows: {}). تحقق من دعم Word للطباعة المباشرة.", result as isize));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result<(), String> {
     use base64::Engine;
@@ -439,6 +491,7 @@ fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result
     fs::write(&path, bytes).map_err(|e|e.to_string())?;
     #[cfg(target_os="windows")]
     {
+        if print { return print_docx_with_windows_dialog(&path); }
         // ShellExecuteW opens the registered DOCX handler directly with no PowerShell
         // or visible console window. Word receives a generated temporary copy only.
         use std::os::windows::ffi::OsStrExt;
