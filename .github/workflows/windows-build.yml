@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in package.json bun.lock desktop/src-tauri/Cargo.toml desktop/src-tauri/tauri.conf.json desktop/vite.config.ts src/assets/logo-book.png.b64 src/assets/sidebar-heritage.jpg.b64 src/assets/hero-school.jpg.b64 public/favicon.png.b64; do
+          for file in package.json bun.lock desktop/src-tauri/Cargo.toml desktop/src-tauri/tauri.conf.json desktop/vite.config.ts src/assets/logo-book.png.b64 src/assets/heritage-original.jpg.b64 src/assets/hero-school.jpg.b64 public/favicon.png.b64; do
             if [ ! -f "$file" ]; then
               echo "::error::Missing reviewed source: $file"
               exit 1
@@ -78,7 +78,7 @@ jobs:
       - name: Restore reviewed binary assets
         shell: pwsh
         run: |
-          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/sidebar-heritage.jpg', 'src/assets/hero-school.jpg')) {
+          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/heritage-original.jpg', 'src/assets/hero-school.jpg')) {
             $encoded = Get-Content -Raw ($item + '.b64')
             $bytes = [Convert]::FromBase64String($encoded.Trim())
             [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), $bytes)
