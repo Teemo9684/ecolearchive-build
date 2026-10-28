@@ -96,7 +96,7 @@ function Dashboard() {
           <div className="hidden shrink-0 animate-fade-up lg:block">
             <div className="relative grid h-48 w-48 place-items-center rounded-full border-2 border-gold/80 bg-sidebar/70 shadow-2xl ring-8 ring-gold/15 backdrop-blur">
               <div className="absolute inset-2 rounded-full border border-gold/30" />
-              <LovableSchoolLogo logo={approvedLogo} className="h-40 w-40 md:h-44 md:w-44" />
+              <LovableSchoolLogo logo={approvedLogo} className="h-[11.5rem] w-[11.5rem]" />
             </div>
           </div>
           <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
