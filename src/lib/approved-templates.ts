@@ -1,5 +1,11 @@
 /** Select approved source documents without altering the originals. */
 import PizZip from "pizzip";
+const readBuffer = (file: Blob): Promise<ArrayBuffer> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(reader.error);
+  reader.onload = () => resolve(reader.result as ArrayBuffer);
+  reader.readAsArrayBuffer(file);
+});
 export type ApprovedFormat = "docx" | "pdf";
 export interface ApprovedTemplateFile { file: File; format: ApprovedFormat; name: string }
 export async function readApprovedTemplate(file: File): Promise<ApprovedTemplateFile> {
@@ -18,7 +24,7 @@ export async function readApprovedTemplate(file: File): Promise<ApprovedTemplate
     throw new Error("صيغة DOCX غير صالحة");
   if (ext === "docx") {
     try {
-      const zip = new PizZip(await file.arrayBuffer());
+      const zip = new PizZip(await readBuffer(file));
       if (!zip.file("[Content_Types].xml") || !zip.file("word/document.xml")) throw new Error("Missing OOXML parts");
     } catch { throw new Error("قالب Word غير صالح: بنية DOCX ناقصة أو تالفة"); }
   }
