@@ -46,7 +46,7 @@ jobs:
       - name: Restore reviewed image assets
         shell: pwsh
         run: |
-          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/hero-school.jpg')) {
+          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/sidebar-heritage.jpg', 'src/assets/hero-school.jpg')) {
             $encoded = Get-Content -Raw ($item + '.b64')
             [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), [Convert]::FromBase64String($encoded.Trim()))
           }
