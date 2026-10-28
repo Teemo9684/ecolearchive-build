@@ -363,11 +363,16 @@ fn create_word_document(app: tauri::AppHandle, title: String, body: String, head
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn installed_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
