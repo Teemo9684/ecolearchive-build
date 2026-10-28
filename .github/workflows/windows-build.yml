@@ -81,6 +81,12 @@ jobs:
         run: bun run desktop:build
       - name: Generate app icons
         run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
+      - name: Run SQLite and Word generation tests
+        shell: pwsh
+        working-directory: desktop/src-tauri
+        run: |
+          cargo test --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Rust regression tests failed' }
       - name: Build preview NSIS (no updater signing)
         shell: pwsh
         working-directory: desktop
