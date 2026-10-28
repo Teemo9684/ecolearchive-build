@@ -75,6 +75,8 @@ jobs:
           }
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
+      - name: Run frontend tests
+        run: bun run test
       - name: Build offline frontend
         run: bun run desktop:build
       - name: Generate app icons
