@@ -368,11 +368,63 @@ fn installed_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+
+/** User-owned Word templates live in Windows Documents; generated documents never overwrite them. */
+fn approved_templates_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let documents = app.path().document_dir().map_err(|e| e.to_string())?;
+    let folder = documents.join("EcoleArchive").join("قوالب الوثائق");
+    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    Ok(folder)
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserTemplateInfo { name: String, path: String }
+#[tauri::command]
+fn list_user_word_templates(app: tauri::AppHandle) -> Result<Vec<UserTemplateInfo>, String> {
+    let folder = approved_templates_directory(&app)?;
+    let mut out = Vec::new();
+    for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let valid = path.is_file()
+            && path.extension().and_then(|x| x.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("docx"))
+            && !path.file_name().and_then(|x| x.to_str()).unwrap_or("").starts_with("~$");
+        if valid {
+            out.push(UserTemplateInfo {
+                name: path.file_name().unwrap().to_string_lossy().to_string(),
+                path: path.to_string_lossy().to_string(),
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+#[tauri::command]
+fn read_user_word_template(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    use base64::Engine;
+    let basename = std::path::Path::new(&name);
+    if basename.components().count() != 1 || basename.file_name().and_then(|v|v.to_str()) != Some(name.as_str())
+        || !name.to_lowercase().ends_with(".docx") || name.starts_with("~$") {
+        return Err("Invalid template filename".into());
+    }
+    let root = approved_templates_directory(&app)?;
+    let path = root.join(name);
+    if !path.is_file() { return Err("Template not found".into()); }
+    let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
+    if metadata.len() > 20 * 1024 * 1024 { return Err("Template exceeds 20MB".into()); }
+    let raw = fs::read(path).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(raw))
+}
+#[tauri::command]
+fn user_word_template_folder(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(approved_templates_directory(&app)?.to_string_lossy().to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
