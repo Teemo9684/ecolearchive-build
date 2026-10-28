@@ -15,18 +15,11 @@ export function renderApprovedDocx(
   values: Record<string, string>,
 ): Blob {
   const zip = new PizZip(source);
-  // strict null handling: a missing required field must not silently turn blank.
-  const required = extractApprovedDocxFields(source);
-  if (!required.length) throw new Error("القالب لا يحتوي على أي حقول للتعبئة");
-  for (const key of required) {
-    if (!Object.prototype.hasOwnProperty.call(values, key) || !values[key]?.trim()) {
-      throw new Error(`حقل غير معبأ: ${key}`);
-    }
-  }
+  // Blank optional fields render as empty text; do not block preview or print.
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
-    nullGetter: (part) => { throw new Error(`حقل غير معبأ: ${part.value}`); },
+    nullGetter: () => "",
   });
   doc.render(values);
   const bytes = doc.getZip().generate({ type: "uint8array", compression: "DEFLATE" });
