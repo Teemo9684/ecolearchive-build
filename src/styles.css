@@ -322,3 +322,28 @@
 .emblem-shine { animation: emblem-shine 7s ease-in-out infinite; }
 @keyframes emblem-shine { 0%,60% { transform: translateX(0) rotate(20deg); } 100% { transform: translateX(320px) rotate(20deg); } }
 @media (prefers-reduced-motion: reduce) { .emblem-shine { animation: none; opacity: 0; } }
+
+/* Exact layer geometry and 6s gold sweep from the approved Lovable project. */
+.logo-glow {
+  filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-gold, #d5ac61) 45%, transparent))
+          drop-shadow(0 6px 10px oklch(0 0 0 / 45%));
+}
+.logo-shine {
+  background: linear-gradient(100deg,
+    transparent 43%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 40%, transparent) 47.5%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 90%, white) 50%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 40%, transparent) 52.5%,
+    transparent 57%);
+  background-size: 200% 100%;
+  animation: lovable-school-shine 6s linear infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes lovable-school-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-shine { animation: none; opacity: 0; }
+}
