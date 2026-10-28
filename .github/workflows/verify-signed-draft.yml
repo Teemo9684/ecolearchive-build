@@ -1,0 +1,43 @@
+name: Verify signed draft on isolated Windows runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify_draft:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Download draft assets with restricted token
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          if (-not $env:GH_TOKEN) { throw "Missing release token" }
+          gh release download v0.1.7 -R Teemo9684/ecolearchive-updates -p "EcoleArchive-0.1.7-x64-setup.exe" -p "EcoleArchive-0.1.7-x64-setup.exe.sig" -p "latest.json" --dir draft
+          if ($LASTEXITCODE -ne 0) { throw "Cannot download signed draft assets" }
+      - name: Validate metadata, signature file and executable checksum
+        shell: pwsh
+        run: |
+          $j = Get-Content draft/latest.json -Raw | ConvertFrom-Json
+          if ($j.version -ne '0.1.7') { throw "Version mismatch" }
+          $exe = 'EcoleArchive-0.1.7-x64-setup.exe'
+          if (-not $j.platforms.'windows-x86_64'.url.EndsWith("/$exe")) { throw "Incorrect installer URL" }
+          $sig = (Get-Content "draft/$exe.sig" -Raw).Trim()
+          if ($sig -ne $j.platforms.'windows-x86_64'.signature) { throw "Signature metadata mismatch" }
+          $hash = (Get-FileHash "draft/$exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '51f101d2fdb83fb7b4c453edc42ab8ff713533c2083d18c174a5f4718504aaaa') { throw "Installer checksum mismatch" }
+          Write-Host "Metadata and SHA256 verified"
+      - name: Install NSIS on isolated temporary Windows machine
+        shell: pwsh
+        run: |
+          $installer = (Resolve-Path 'draft/EcoleArchive-0.1.7-x64-setup.exe').Path
+          $proc = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "NSIS installer returned exit code $($proc.ExitCode)" }
+          $paths = @("$env:LOCALAPPDATA/Programs", "$env:ProgramFiles")
+          $installed = foreach ($root in $paths) { if (Test-Path $root) { Get-ChildItem $root -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*archive*' -or $_.DirectoryName -like '*التسيير*' } } }
+          if (-not $installed) { Write-Warning "NSIS exited normally but application install path was not automatically identified. Manual UI test is still needed." }
+          Write-Host 'Isolated NSIS installation completed'
