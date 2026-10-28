@@ -1,8 +1,14 @@
+import { useId } from "react";
+
 /**
  * Inline SVG school emblem — no external requests, always renders offline.
  * No portrait is used: the project has no authentic photo of Sheikh Larbi Tebessi.
  */
 export function SchoolEmblem({ className }: { className?: string }) {
+  const uniqueId = useId().replace(/:/g, "");
+  const goldPartsId = `em-gold-parts-${uniqueId}`;
+  const goldMaskId = `em-gold-mask-${uniqueId}`;
+  const shineGradientId = `em-shine-gradient-${uniqueId}`;
   const star = Array.from({ length: 8 }, (_, i) => i * 45);
   const dots = Array.from({ length: 24 }, (_, i) => i * 15);
   return (
@@ -19,9 +25,17 @@ export function SchoolEmblem({ className }: { className?: string }) {
         </radialGradient>
         <path id="em-top" d="M 30 100 A 70 70 0 0 1 170 100" />
         <path id="em-bottom" d="M 34 100 A 66 66 0 0 0 166 100" />
-        <clipPath id="em-clip"><circle cx="100" cy="100" r="96" /></clipPath>
+        <mask id={goldMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200" style={{ maskType: "alpha" }}>
+          <use href={`#${goldPartsId}`} />
+        </mask>
+        <linearGradient id={shineGradientId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="white" stopOpacity="0" />
+          <stop offset="0.5" stopColor="white" stopOpacity="0.9" />
+          <stop offset="1" stopColor="white" stopOpacity="0" />
+        </linearGradient>
       </defs>
       <circle cx="100" cy="100" r="97" fill="url(#em-navy)" />
+      <g id={goldPartsId}>
       <circle cx="100" cy="100" r="95" fill="none" stroke="url(#em-gold)" strokeWidth="3" />
       <circle cx="100" cy="100" r="88" fill="none" stroke="url(#em-gold)" strokeWidth="0.8" opacity="0.7" />
       <circle cx="100" cy="100" r="55" fill="none" stroke="url(#em-gold)" strokeWidth="1.6" />
@@ -56,19 +70,27 @@ export function SchoolEmblem({ className }: { className?: string }) {
       <g>
         <path d="M100 104 C 88 97 76 97 66 101 L 66 130 C 76 126 88 126 100 133 Z" fill="url(#em-gold)" />
         <path d="M100 104 C 112 97 124 97 134 101 L 134 130 C 124 126 112 126 100 133 Z" fill="url(#em-gold)" />
-        <g stroke="url(#em-navy)" strokeWidth="1" opacity="0.75">
-          <path d="M72 108 C 80 105 88 106 95 109" fill="none" />
-          <path d="M72 114 C 80 111 88 112 95 115" fill="none" />
-          <path d="M72 120 C 80 117 88 118 95 121" fill="none" />
-          <path d="M105 109 C 112 106 120 105 128 108" fill="none" />
-          <path d="M105 115 C 112 112 120 111 128 114" fill="none" />
-          <path d="M105 121 C 112 118 120 117 128 120" fill="none" />
-        </g>
-        <path d="M100 104 V 133" stroke="url(#em-navy)" strokeWidth="1.2" />
+
       </g>
-      <g clipPath="url(#em-clip)">
-        <rect className="emblem-shine" x="-60" y="-20" width="40" height="240" fill="white" opacity="0.18" transform="rotate(20 100 100)" />
       </g>
+      {/* Navy book details remain above the gold artwork, outside the shine mask. */}
+      <g stroke="url(#em-navy)" strokeWidth="1" opacity="0.75">
+                <path d="M72 108 C 80 105 88 106 95 109" fill="none" />
+                <path d="M72 114 C 80 111 88 112 95 115" fill="none" />
+                <path d="M72 120 C 80 117 88 118 95 121" fill="none" />
+                <path d="M105 109 C 112 106 120 105 128 108" fill="none" />
+                <path d="M105 115 C 112 112 120 111 128 114" fill="none" />
+                <path d="M105 121 C 112 118 120 117 128 120" fill="none" />
+              </g>
+              <path d="M100 104 V 133" stroke="url(#em-navy)" strokeWidth="1.2" />
+      <rect
+        className="emblem-shine"
+        x="-60" y="-20" width="40" height="240"
+        fill={`url(#${shineGradientId})`}
+        opacity="0.45"
+        mask={`url(#${goldMaskId})`}
+        transform="rotate(20 100 100)"
+      />
     </svg>
   );
 }
