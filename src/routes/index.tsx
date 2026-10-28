@@ -11,7 +11,8 @@ import { Empty } from "@/components/app/bits";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence, DocumentRecord, Staff } from "@/lib/db/types";
 import hero from "@/assets/hero-school.jpg";
-import logo from "@/assets/logo-book.png";
+import approvedLogo from "@/assets/school-logo.png";
+import { LovableSchoolLogo } from "@/components/app/LovableSchoolLogo";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -95,7 +96,7 @@ function Dashboard() {
           <div className="hidden shrink-0 animate-fade-up lg:block">
             <div className="relative grid h-48 w-48 place-items-center rounded-full border-2 border-gold/80 bg-sidebar/70 shadow-2xl ring-8 ring-gold/15 backdrop-blur">
               <div className="absolute inset-2 rounded-full border border-gold/30" />
-              <img src={logo} alt="" width={140} height={140} className="h-28 w-28 object-contain drop-shadow-xl logo-3d-spin" />
+              <LovableSchoolLogo logo={approvedLogo} />
             </div>
           </div>
           <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
