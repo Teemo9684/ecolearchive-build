@@ -53,8 +53,10 @@ jobs:
       - name: Install and compile frontend
         shell: pwsh
         run: |
-          bun install --frozen-lockfile
+          bun install
           if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          bun run test
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend tests failed' }
           bun run desktop:build
           if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
           bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
