@@ -74,7 +74,7 @@ jobs:
             [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), $bytes)
           }
       - name: Install JavaScript dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
       - name: Run frontend tests
         run: bun run test
       - name: Build offline frontend
