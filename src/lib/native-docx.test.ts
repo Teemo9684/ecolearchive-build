@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import PizZip from "pizzip";
 import { renderApprovedDocx, extractApprovedDocxFields, DOCX_MIME } from "./native-docx";
 
+const readBlob = (blob: Blob): Promise<ArrayBuffer> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(reader.error);
+  reader.onload = () => resolve(reader.result as ArrayBuffer);
+  reader.readAsArrayBuffer(blob);
+});
 function minimalDocx(text: string) {
   const zip = new PizZip();
   zip.file("[Content_Types].xml", `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
@@ -36,7 +42,7 @@ describe("native DOCX generation", () => {
     const copyBefore = new Uint8Array(original);
     const output = renderApprovedDocx(original, {recipient:"مديرية التربية"});
     expect(output.type).toBe(DOCX_MIME);
-    const opened = new PizZip(new Uint8Array(await output.arrayBuffer()));
+    const opened = new PizZip(new Uint8Array(await readBlob(output)));
     expect(opened.file("word/document.xml")!.asText()).toContain("مديرية التربية");
     expect(new Uint8Array(original)).toEqual(copyBefore);
   });
