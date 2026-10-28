@@ -420,11 +420,46 @@ fn user_word_template_folder(app: tauri::AppHandle) -> Result<String, String> {
     Ok(approved_templates_directory(&app)?.to_string_lossy().to_string())
 }
 
+
+/** Work on a generated copy in the temporary directory; the user's approved
+ * Documents template is never opened for editing or overwritten. */
+#[tauri::command]
+fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64).map_err(|_| "Invalid DOCX payload")?;
+    if bytes.len() < 16 || bytes.len() > 20 * 1024 * 1024
+        || !bytes.starts_with(b"PK") || !file_name.to_lowercase().ends_with(".docx") {
+        return Err("Invalid generated Word file".into());
+    }
+    let checksum = format!("{:x}", Sha256::digest(&bytes));
+    let dir = std::env::temp_dir().join("EcoleArchive").join("word-preview");
+    fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+    let path = dir.join(format!("document-{}.docx", &checksum[..24]));
+    fs::write(&path, bytes).map_err(|e|e.to_string())?;
+    #[cfg(target_os="windows")]
+    {
+        let path_text = path.to_string_lossy().to_string();
+        let mut command = std::process::Command::new("powershell.exe");
+        command.args(["-NoProfile", "-NonInteractive", "-Command",
+            if print {
+                "Start-Process -FilePath $args[0] -Verb Print"
+            } else {
+                "Start-Process -FilePath $args[0]"
+            }, "--", &path_text]);
+        let result = command.status().map_err(|e| format!("تعذر فتح Word: {e}"))?;
+        if !result.success() { return Err("تعذر فتح الوثيقة في Word أو إرسالها للطابعة".into()); }
+        Ok(())
+    }
+    #[cfg(not(target_os="windows"))]
+    { let _ = (path, print); Err("This feature requires Windows".into()) }
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
