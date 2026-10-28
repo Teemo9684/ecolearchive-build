@@ -85,7 +85,7 @@ jobs:
         shell: pwsh
         working-directory: desktop/src-tauri
         run: |
-          cargo test --locked
+          cargo test
           if ($LASTEXITCODE -ne 0) { throw 'Rust regression tests failed' }
       - name: Build preview NSIS (no updater signing)
         shell: pwsh
