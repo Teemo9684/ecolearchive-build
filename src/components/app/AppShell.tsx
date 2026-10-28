@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <button className="absolute end-3 top-3 md:hidden" onClick={() => setOpen(false)} aria-label="إغلاق"><X className="h-5 w-5" /></button>
         <div className="flex flex-col items-center px-4 pb-4 pt-6 text-center">
-          <img src={bookLogo} alt="شعار الكتاب" width={128} height={128} className="block h-[8.1rem] w-[8.1rem] object-contain drop-shadow-xl logo-3d-spin md:h-36 md:w-36" />
+          <img src={bookLogo} alt="شعار الكتاب" width={104} height={104} className="block h-24 w-24 object-contain drop-shadow-xl logo-3d-spin md:h-[6.5rem] md:w-[6.5rem]" />
           <div className="mt-2 font-display text-[16px] font-bold leading-snug">منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
           <div className="gold-rule header-gold-shimmer mt-4 w-3/4 opacity-70" />
         </div>
