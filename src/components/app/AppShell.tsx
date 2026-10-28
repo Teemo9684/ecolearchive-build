@@ -11,7 +11,7 @@ import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-book.png";
 import packageInfo from "../../../package.json";
-import { invoke } from "@tauri-apps/api/core";
+import { isDesktopRuntime } from "@/lib/db/desktop";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
 const NAV: NavItem[][] = [
@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const home = path === "/";
 
   useEffect(() => { setDark(localStorage.getItem("ui-theme") === "dark"); }, []);
-  useEffect(() => { if ("__TAURI_INTERNALS__" in window) void invoke<string>("installed_app_version").then(setInstalledVersion).catch(() => {}); }, []);
+  useEffect(() => { if (isDesktopRuntime()) void window.__TAURI_INTERNALS__!.invoke("installed_app_version").then((v: unknown) => { if (typeof v === "string") setInstalledVersion(v); }).catch(() => {}); }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
 
