@@ -1,6 +1,10 @@
 name: Verify signed draft on isolated Windows runner
 
 on:
+  push:
+    branches: [feature/official-v1-0-0-candidate]
+    paths:
+      - '.release-requests/verify-v1.0.0.txt'
   workflow_dispatch:
 
 permissions:
@@ -8,9 +12,16 @@ permissions:
 
 jobs:
   verify_draft:
+    if: github.repository == 'Teemo9684/ecolearchive-build'
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+      - name: Validate requested version
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          if ((Get-Content '.release-requests/verify-v1.0.0.txt' -Raw).Trim() -ne 'VERIFY_V1.0.0_DRAFT') { throw 'Unexpected draft verification request' }
       - name: Download draft assets with restricted token
         shell: pwsh
         env:
