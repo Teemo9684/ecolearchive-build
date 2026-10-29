@@ -15,7 +15,7 @@ export function LovableSchoolLogo({ logo, className = "h-28 w-28" }: { logo: str
       WebkitMaskSize: "contain", maskSize: "contain",
       WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
       WebkitMaskPosition: "center", maskPosition: "center",
-      maskMode: "alpha",
+      WebkitMaskMode: "alpha", maskMode: "alpha",
     }} />}
   </div>;
 }
