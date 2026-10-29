@@ -89,7 +89,7 @@ export function StaffList({ kind }: { kind: StaffKind }) {
 
   return (
     <div>
-      <PageHeader title={t.title} subtitle="سجلات مهنية سرية — للاستعمال الإداري الداخلي فقط"
+      <PageHeader title={t.title}
         actions={<>
           <Button onClick={() => setEdit(blank(kind))}><Plus className="h-4 w-4" />إضافة {t.one}</Button>
           <Button variant="outline" onClick={() => exportCsv([["الاسم", "المعرف", "تاريخ التوظيف", "الرتبة", t.assign, "الوضعية"], ...list.map((x) => [x.fullName, x.employeeId, fmtDate(x.recruitmentDate), x.grade, x.assignment, STAFF_STATUS[x.status]])], `${t.title}.csv`)}><Download className="h-4 w-4" />تصدير القائمة</Button>
@@ -218,7 +218,7 @@ function RecordsTab({ staff, type, recs }: { staff: Staff; type: StaffRecordType
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">سجل {RECORD_TYPE[type]} — الوثائق الداعمة ترفق من تبويب القرارات والوثائق</div>
+        <div className="text-sm text-muted-foreground" title="الوثائق الداعمة ترفق من تبويب القرارات والوثائق">سجل {RECORD_TYPE[type]} <span className="cursor-help">ⓘ</span></div>
         <Button size="sm" onClick={() => { setErr(""); setEdit({ id: "", staffId: staff.id, staffKind: staff.kind, type, period: "", date: new Date().toISOString().slice(0, 10), dateEnd: "", score: "", details: "", createdAt: "" }); }}><Plus className="h-4 w-4" />إضافة</Button>
       </div>
       {sorted.length === 0 ? <Empty text="لا توجد سجلات" /> : (
