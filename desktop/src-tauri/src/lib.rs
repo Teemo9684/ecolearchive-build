@@ -515,11 +515,64 @@ fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result
     { let _ = (path, print); Err("This feature requires Windows".into()) }
 }
 
+#[tauri::command]
+fn preview_generated_docx_pdf(base64: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64).map_err(|_| "Invalid DOCX payload")?;
+    if bytes.len() < 16 || bytes.len() > 20 * 1024 * 1024 || !bytes.starts_with(b"PK") {
+        return Err("Invalid Word document".into());
+    }
+    #[cfg(target_os="windows")]
+    {
+        use std::process::Command;
+        use std::os::windows::process::CommandExt;
+        let checksum = format!("{:x}", Sha256::digest(&bytes));
+        let dir = std::env::temp_dir().join("EcoleArchive").join("word-preview");
+        fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+        let docx = dir.join(format!("preview-{}.docx", &checksum[..24]));
+        let pdf = dir.join(format!("preview-{}.pdf", &checksum[..24]));
+        if !pdf.is_file() {
+            fs::write(&docx, &bytes).map_err(|e|e.to_string())?;
+            let source = docx.to_string_lossy().replace("'", "''");
+            let target = pdf.to_string_lossy().replace("'", "''");
+            let script = format!(r#"$ErrorActionPreference='Stop'
+$word=$null
+$document=$null
+try {{
+  $word=New-Object -ComObject Word.Application
+  $word.Visible=$false
+  $word.DisplayAlerts=0
+  $document=$word.Documents.Open('{}',$false,$true)
+  $document.ExportAsFixedFormat('{}',17)
+}} finally {{
+  if($null -ne $document) {{ $document.Close(0) }}
+  if($null -ne $word) {{ $word.Quit() }}
+}}
+"#,source,target);
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let result=Command::new("powershell.exe")
+                .args(["-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command",&script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output().map_err(|e|format!("تعذر تشغيل محرك Word: {}",e))?;
+            if !result.status.success() || !pdf.is_file() {
+                let stderr=String::from_utf8_lossy(&result.stderr);
+                return Err(format!("فشل إنشاء معاينة PDF بواسطة Word: {}",stderr.trim()));
+            }
+        }
+        let result=fs::read(pdf).map_err(|e|e.to_string())?;
+        if !result.starts_with(b"%PDF") {return Err("Invalid generated PDF".into())}
+        Ok(base64::engine::general_purpose::STANDARD.encode(result))
+    }
+    #[cfg(not(target_os="windows"))]
+    {let _=bytes;Err("Requires Windows with Microsoft Word".into())}
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
