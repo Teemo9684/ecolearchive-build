@@ -288,7 +288,15 @@
 @media (prefers-reduced-motion: reduce) { .logo-3d-spin, .header-gold-shimmer::after, .notification-once {animation:none!important;} .nav-soft-glow {transition:none!important;} }
 
 /* Decorative school system heading only; all navigation text keeps the original font. */
-.school-ruqaa-title { font-family: "Aref Ruqaa", "Cairo", serif; font-weight: 700; }
+.school-ruqaa-title {
+  font-family: "Aref Ruqaa", "Cairo", serif;
+  font-weight: 700;
+  /* Provide extra space for Arabic upper dots at larger Windows scaling. */
+  line-height: 1.9;
+  padding-block: 0.16em 0.24em;
+  overflow: visible;
+  text-rendering: optimizeLegibility;
+}
 
 
 /* Restrained golden glint on sidebar heritage emblem, no change to the portrait pixels. */
