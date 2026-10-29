@@ -37,7 +37,7 @@ export function NativeWordComposer() {
   const [preview,setPreview]=useState<string|null>(null);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  // Keep the cached PDF blob URL alive when the preview panel is closed.\n  // Revoke it only when replaced or when the document composer unmounts.\n  useEffect(() => () => { if (previewCache.current) URL.revokeObjectURL(previewCache.current.url); }, []);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
