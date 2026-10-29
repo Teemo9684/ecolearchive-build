@@ -43,6 +43,9 @@ function ArchivePage() {
   const hash = useRouterState({ select: s => s.location.hash });
   const [tab, setTab] = useState<Tab>(hash === "bin" ? "bin" : "active");
   useEffect(() => { if (hash === "bin") setTab("bin"); }, [hash]);
+  const relatedMatch = /^related:(teacher|employee|correspondence|student|staffRecord):(.+)$/.exec(hash || "");
+  const relatedType = relatedMatch?.[1];
+  const relatedId = relatedMatch?.[2];
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
   const [year, setYear] = useState("");
@@ -61,12 +64,13 @@ function ArchivePage() {
       tab === "bin" ? !!d.deletedAt : !d.deletedAt && (tab === "archived" ? d.status === "archived" : d.status === "active"),
     );
     if (tab === "dups") list = dupGroups.flat();
+    if (relatedType && relatedId) list = list.filter((d) => d.relatedType === relatedType && d.relatedId === relatedId);
     if (cat) list = list.filter((d) => d.categoryId === cat);
     if (year) list = list.filter((d) => d.academicYear === year);
     if (type) list = list.filter((d) => d.docType === type);
     if (s) list = list.filter((d) => [d.title, d.reference, d.fileName, d.description, d.subcategory, ...d.tags].some((x) => x?.toLowerCase().includes(s)));
     return [...list].sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ar") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-  }, [docs, tab, cat, year, type, q, sort, dupGroups]);
+  }, [docs, tab, cat, year, type, q, sort, dupGroups, relatedType, relatedId]);
 
   const counts = {
     active: docs.filter((d) => !d.deletedAt && d.status === "active").length,
@@ -84,6 +88,7 @@ function ArchivePage() {
         actions={<><Button variant="outline" disabled={checking} onClick={checkIntegrity}><ShieldCheck className="h-4 w-4" />{checking?"جار الفحص…":"فحص سلامة الأرشيف"}</Button><Button variant="outline" onClick={() => exportCsv([["العنوان", "المرجع", "التصنيف", "السنة", "النوع", "التاريخ", "اسم الملف"], ...filtered.map((d) => [d.title, d.reference, catName(d.categoryId), d.academicYear, DOC_TYPE_LABEL[d.docType] ?? "", fmtDate(d.date), d.fileName ?? ""])], "فهرس-الأرشيف.csv")}>
           <Download className="h-4 w-4" />تصدير الفهرس</Button></>} />
       {integrity&&<section className="panel mt-3 p-4 text-sm" role="status"><h2 className="font-bold mb-2">نتائج فحص الأرشيف — {integrity.documents} وثيقة</h2>{([["ملفات مفقودة",integrity.missingFiles],["اختلاف بصمة الملفات",integrity.hashMismatches],["مراسلات غير مرتبطة",integrity.unlinkedCorrespondences],["مراجع مكررة",integrity.duplicateReferences]] as const).map(([label,items])=><div key={label} className="mb-1"><strong>{label}: {items.length}</strong>{items.length>0&&<ul className="list-disc ps-5">{items.slice(0,30).map((item,i)=><li key={i}>{item}</li>)}</ul>}</div>)}</section>}
+      {relatedType && relatedId && <div className="mt-3 rounded-lg border border-gold/40 bg-muted p-3 text-sm">عرض الوثائق المرتبطة بالسجل المختار. <a href="/archive" className="ms-2 font-semibold text-primary underline">عرض جميع الوثائق</a></div>}
       <DropZone onFiles={setFiles} />
       <ImportDialog files={files} onClose={() => setFiles([])} />
 
