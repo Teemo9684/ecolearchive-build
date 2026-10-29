@@ -148,7 +148,11 @@ export function NativeWordComposer() {
     {source&&<>
       <div className="grid gap-4 md:grid-cols-2">
         {fields.map(key=><label key={key} className="block text-sm font-medium">{key.replaceAll("_"," ")}
-          <input list={key==="المرسل_إليه"?"native-recipients":key==="المصلحة"?"native-departments":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+          {/^(?:نص_المراسلة|نص المراسلة|المحتوى|المتن|نص_الوثيقة)$/.test(key.trim()) ? (
+            <textarea rows={8} dir="rtl" className="field-select mt-2 block min-h-40 w-full resize-y whitespace-pre-wrap leading-7" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+          ) : (
+            <input list={key==="المرسل_إليه"?"native-recipients":key==="المصلحة"?"native-departments":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+          )}
         </label>)}
       </div>
       <datalist id="native-recipients">{recipients.map(r=><option key={r} value={r}/>)}</datalist>
