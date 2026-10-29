@@ -14,6 +14,8 @@ import hero from "@/assets/hero-school.jpg";
 import approvedLogo from "@/assets/school-logo.png";
 import { LovableSchoolLogo } from "@/components/app/LovableSchoolLogo";
 import { cn } from "@/lib/utils";
+import { isDesktopRuntime } from "@/lib/db/desktop";
+import packageInfo from "../../package.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -36,6 +38,9 @@ function Dashboard() {
   const settings = useSettings();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const docs = useCollection<DocumentRecord>("documents");
   const corr = useCollection<Correspondence>("correspondences");
@@ -43,6 +48,26 @@ function Dashboard() {
   const teachers = useCollection<Staff>("teachers");
 
   useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!isDesktopRuntime()) return;
+    let active = true;
+    const check = () => {
+      window.__TAURI_INTERNALS__!.invoke("check_desktop_update")
+        .then((v: unknown) => { if (active) setAvailableUpdate(typeof v === "string" && v ? v : null); })
+        .catch(() => { /* offline or updater unavailable: preserve existing alerts */ });
+    };
+    check();
+    const timer = window.setInterval(check, 30 * 60 * 1000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    if (!infoOpen && !alertsOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setInfoOpen(false); setAlertsOpen(false); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [infoOpen, alertsOpen]);
 
   const liveDocs = docs.data.filter((d) => !d.deletedAt);
   const liveCorr = corr.data.filter((c) => !c.deletedAt);
@@ -86,6 +111,52 @@ function Dashboard() {
 
   return (
     <div>
+      {(infoOpen || alertsOpen) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) { setInfoOpen(false); setAlertsOpen(false); } }}>
+          <section role="dialog" aria-modal="true" aria-label={infoOpen ? "معلومات المدرسة والبرنامج" : "التنبيهات"} className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl border bg-card p-6 text-card-foreground shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">{infoOpen ? "معلومات المدرسة والمنظومة" : "مركز التنبيهات"}</h2>
+              <button aria-label="إغلاق" onClick={() => { setInfoOpen(false); setAlertsOpen(false); }} className="rounded-lg p-2 hover:bg-muted">✕</button>
+            </div>
+            {infoOpen ? (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-muted p-4">
+                  <h3 className="text-lg font-bold">{settings.schoolName}</h3>
+                  <p className="text-sm text-muted-foreground">{settings.city} · السنة الدراسية {settings.currentYear}</p>
+                  <p className="mt-2 text-sm">منظومة التسيير الإداري والأرشيف الرقمي — الإصدار {packageInfo.version}</p>
+                </div>
+                <h3 className="font-bold">إحصائيات المؤسسة</h3>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {[
+                    ["الوثائق المؤرشفة", liveDocs.length], ["البريد الوارد", inCount], ["البريد الصادر", outCount],
+                    ["ملفات العمال", employees.data.filter(x => !x.deletedAt).length],
+                    ["العمال التربويون", teachers.data.filter(x => !x.deletedAt).length],
+                    ["المراسلات قيد المعالجة", tasks.length]
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border bg-background p-3 text-center">
+                      <div className="text-2xl font-bold text-primary">{value}</div><div className="text-xs text-muted-foreground">{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">تعرض الإحصائيات البيانات المسجلة في المنظومة، وتتحدث عند تحديث السجلات.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {availableUpdate && <div className="rounded-xl border border-gold/50 bg-muted p-4">
+                  <div className="font-bold">يتوفر تحديث جديد: {availableUpdate}</div>
+                  <p className="mt-1 text-sm">يمكنك مراجعة التحديث وتثبيته من الإعدادات.</p>
+                  <button onClick={() => { setAlertsOpen(false); navigate({ to: "/settings" }); }} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground">فتح إعدادات التحديث</button>
+                </div>}
+                {pendingIn > 0 && <div className="rounded-xl border p-4">
+                  <div className="font-bold">مراسلات واردة تنتظر المعالجة: {pendingIn}</div>
+                  <button onClick={() => { setAlertsOpen(false); navigate({ to: "/mail/incoming" }); }} className="mt-2 text-sm text-primary underline">فتح البريد الوارد</button>
+                </div>}
+                {!availableUpdate && pendingIn === 0 && <p className="rounded-xl bg-muted p-4 text-sm">لا توجد تنبيهات جديدة.</p>}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
       {/* Banner */}
       <section className="relative overflow-hidden bg-sidebar">
         <img src={hero} alt="" width={1920} height={640} className="absolute inset-0 h-full w-full scale-105 object-cover" style={{ transform: "scaleX(-1)" }} />
@@ -94,10 +165,7 @@ function Dashboard() {
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-sidebar/80 to-transparent" />
         <div className="relative flex flex-col gap-5 px-5 pb-11 pt-5 md:px-8 lg:flex-row lg:items-center">
           <div className="hidden shrink-0 animate-fade-up lg:block">
-            <div className="relative grid h-48 w-48 place-items-center rounded-full border-2 border-gold/80 bg-sidebar/70 shadow-2xl ring-8 ring-gold/15 backdrop-blur">
-              <div className="absolute inset-2 rounded-full border border-gold/30" />
-              <LovableSchoolLogo logo={approvedLogo} className="h-[11.5rem] w-[11.5rem]" />
-            </div>
+            <LovableSchoolLogo logo={approvedLogo} className="h-48 w-48" />
           </div>
           <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
             <div className="glass mx-auto mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold">
@@ -119,13 +187,13 @@ function Dashboard() {
                   <Search className="pointer-events-none absolute end-3 top-1/2 h-5 w-5 -translate-y-1/2 opacity-80" />
                 </div>
               </form>
-              <Link to="/mail/incoming" aria-label="التنبيهات" className="glass relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition hover:ring-2 hover:ring-gold/60">
+              <button type="button" onClick={() => setAlertsOpen(true)} aria-label="التنبيهات" className="glass relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition hover:ring-2 hover:ring-gold/60">
                 <Bell className="h-5 w-5" />
-                {pendingIn > 0 && <span className="absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[11px] font-bold text-destructive-foreground ring-2 ring-sidebar">{pendingIn}</span>}
-              </Link>
-              <Link to="/settings" className="glass hidden h-11 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-semibold transition hover:ring-2 hover:ring-gold/60 sm:flex">
+                {(pendingIn > 0 || availableUpdate) && <span className="absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[11px] font-bold text-destructive-foreground ring-2 ring-sidebar">{pendingIn + (availableUpdate ? 1 : 0)}</span>}
+              </button>
+              <button type="button" onClick={() => setInfoOpen(true)} className="glass hidden h-11 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-semibold transition hover:ring-2 hover:ring-gold/60 sm:flex">
                 <UserRound className="h-5 w-5" />المديرة<ChevronDown className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
             <div className="glass flex items-center justify-between gap-3 rounded-2xl px-4 py-3">
               <div className="min-w-0">
