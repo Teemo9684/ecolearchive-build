@@ -163,6 +163,7 @@ export function StaffProfile({ kind, id }: { kind: StaffKind; id: string }) {
           <div className="text-sm text-muted-foreground">{s.grade} · {s.assignment} · {s.employeeId}</div>
         </div>
         <Pill tone={s.status === "active" ? "success" : "gold"}>{STAFF_STATUS[s.status]}</Pill>
+        <Link to="/archive" hash={`related:${kind}:${s.id}`} className="rounded-lg border px-3 py-2 text-sm font-semibold text-primary hover:bg-muted">وثائق الملف في الأرشيف</Link>
         <Button variant="outline" onClick={() => setEdit(s)}><Pencil className="h-4 w-4" />تعديل</Button>
       </div>
       <div className="panel">
