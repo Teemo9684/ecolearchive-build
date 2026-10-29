@@ -96,14 +96,15 @@ export function NativeWordComposer() {
     const sum=numbers.reduce((total,k)=>total+parseQuantity(values[k]??""),0);
     // Only templates explicitly containing {رقم_الارسال} receive a sending number.
     // Keep empty optional values blank; use the current calendar year automatically.
-    const sendingNumber = (values["رقم_الارسال"] ?? "").trim();
-    const numberOnly = sendingNumber.match(/^(?:رقم الإرسال\s*:\s*)?(\d+)(?:\s*\/\s*م\.\s*ع\.\s*ت\s*\/\s*\d{4})?$/)?.[1] ?? sendingNumber;
-    const formattedSendingNumber = numberOnly
-      ? `رقم الإرسال : ${numberOnly}/ م. ع. ت/ ${new Date().getFullYear()}`
-      : "";
-    const data={...values,
-      ...(fields.includes("رقم_الارسال")?{"رقم_الارسال":formattedSendingNumber}:{}),
-      ...(fields.includes("المجموع")?{"المجموع":String(sum)}:{})};
+    const data:Record<string,string>={...values, ...(fields.includes("المجموع")?{"المجموع":String(sum)}:{})};
+    for (const key of fields) {
+      const normalized=key.replace(/[إأآٱ]/g,"ا").replace(/[_\s-]+/g,"");
+      if(normalized!=="رقمالارسال")continue;
+      const value=(values[key]??"").trim();
+      if(!value){data[key]="";continue;}
+      if(!/^\d+$/.test(value))throw Error("اكتب رقم الإرسال فقط، مثل 15");
+      data[key]=`رقم الإرسال : ${value}/ م. ع. ت/ ${new Date().getFullYear()}`;
+    }
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
   const preserveDirectoryEntries=()=>{
