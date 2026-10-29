@@ -159,7 +159,22 @@ jobs:
             if(m.version!=="1.0.12" || !p || p.signature!==signature || p.url!==url || signature.length<50) process.exit(2);
           '
           sha256sum release-verified/* | tee release-sha256.txt
+      - name: Prevent duplicate publication of an existing version
+        id: existing-release
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.12 -R Teemo9684/ecolearchive-updates --json isDraft,assets > /tmp/existing-release.json 2>/dev/null; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "::warning::v1.0.12 already exists. This build was verified, but its assets will NOT replace the published release. A new version is required for a new update."
+            jq -e '([.assets[].name] | index("EcoleArchive-1.0.12-x64-setup.exe") != null and index("EcoleArchive-1.0.12-x64-setup.exe.sig") != null and index("latest.json") != null)' /tmp/existing-release.json
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Create draft release and upload exact verified signed bytes
+        if: steps.existing-release.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         shell: bash
@@ -174,6 +189,7 @@ jobs:
           gh release view v1.0.12 -R "$REPO" --json isDraft,assets > /tmp/release.json
           jq -e '.isDraft == true and ([.assets[].name] | (index("EcoleArchive-1.0.12-x64-setup.exe") != null and index("EcoleArchive-1.0.12-x64-setup.exe.sig") != null and index("latest.json") != null))' /tmp/release.json
       - name: Publish signed update after draft verification
+        if: steps.existing-release.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         shell: bash
