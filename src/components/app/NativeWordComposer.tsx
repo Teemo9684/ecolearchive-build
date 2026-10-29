@@ -198,11 +198,11 @@ export function NativeWordComposer() {
         {templates.map(t=><option value={t.name} key={t.name}>{t.name.replace(/\.docx$/i,"")}</option>)}
       </select>
     </label>
-    {!loading&&!templates.length&&<p className="text-sm text-muted-foreground">لا توجد قوالب Word بعد في Documents / EcoleArchive / قوالب الوثائق. ضع ملفات DOCX هناك؛ ستظهر عند دخول القسم.</p>}
+    {!loading&&!templates.length&&<p className="text-sm text-muted-foreground" title="ضع نماذج DOCX في Documents / EcoleArchive / قوالب الوثائق">لا توجد قوالب</p>}
     {source&&<>
       <div className="grid gap-4 md:grid-cols-2">
         {fields.map(key=><label key={key} className="block text-sm font-medium">{key.replaceAll("_"," ")}
-          {key==="رقم_الارسال" && <span className="block text-xs text-muted-foreground">أدخل الرقم فقط (مثل 15)، وسيظهر في الوثيقة: رقم الإرسال : 15/ م. ع. ت/ {new Date().getFullYear()}. اتركه فارغًا إذا لم يكن مطلوبًا.</span>}
+          {key==="رقم_الارسال" && <span className="cursor-help text-xs text-muted-foreground" title={`أدخل الرقم فقط مثل 15؛ وسيظهر رقم الإرسال : 15/ م. ع. ت/ ${new Date().getFullYear()}. يمكن ترك الحقل فارغًا.`} aria-label="مساعدة رقم الإرسال"> ⓘ</span>}
           {/^(?:نص_المراسلة|نص المراسلة|المحتوى|المتن|نص_الوثيقة)$/.test(key.trim()) ? (
             <textarea rows={8} dir="rtl" className="field-select mt-2 block min-h-40 w-full resize-y whitespace-pre-wrap leading-7" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
           ) : (
@@ -217,7 +217,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
-      {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ تحضير معاينة مطابقة للقالب…</p>}
+      {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
       {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div><iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
     </>}
   </section>;
