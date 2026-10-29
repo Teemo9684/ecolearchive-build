@@ -3,7 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
-  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap,
+  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
@@ -20,6 +20,7 @@ const NAV: NavItem[][] = [
     { to: "/templates", label: "إنشاء وثيقة", icon: Plus },
     { to: "/mail/incoming", label: "البريد الوارد", icon: Inbox, badge: true },
     { to: "/mail/outgoing", label: "البريد الصادر", icon: Send },
+    { to: "/email", label: "البريد الإلكتروني", icon: Mail },
     { to: "/archive", label: "الأرشيف الرقمي", icon: FolderOpen },
     { to: "/employees", label: "عمال المؤسسة", icon: Users },
     { to: "/teachers", label: "العمال التربويون", icon: GraduationCap },
