@@ -209,7 +209,7 @@ function Dashboard() {
       <div className="relative -mt-4 space-y-5 rounded-t-3xl bg-background p-4 md:p-6 [&>*]:animate-fade-up [&>*:nth-child(2)]:[animation-delay:80ms] [&>*:nth-child(3)]:[animation-delay:160ms] [&>*:nth-child(4)]:[animation-delay:240ms]">
         {/* Quick actions */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Action to="/templates" title="قوالب الوثائق" sub="نماذج جاهزة للاستعمال" icon={FileText} tone="tone-gold" />
+          <Action to="/templates" title="إنشاء وثيقة" sub="نماذج جاهزة للاستعمال" icon={FileText} tone="tone-gold" />
           <Action to="/templates" title="شهادة مدرسية" sub="إصدار شهادة مدرسية" icon={Award} tone="tone-pink" />
           <Action to="/mail/outgoing" title="جدول إرسال" sub="إنشاء جدول إرسال" icon={Send} tone="tone-green" />
           <Action to="/mail/incoming" title="مراسلة جديدة" sub="إنشاء مراسلة إدارية" icon={FilePlus2} tone="tone-blue" />
