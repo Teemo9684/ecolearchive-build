@@ -35,6 +35,7 @@ export function NativeWordComposer() {
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
+  const previewFrame=useRef<HTMLIFrameElement|null>(null);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
   // Closing the preview should never invalidate its cached PDF URL.
@@ -176,6 +177,19 @@ export function NativeWordComposer() {
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
     finally{setBusy(false);setPreparingPreview(false);}
   };
+  const printPreview=()=>{
+    // The embedded PDF viewer prints the exact PDF currently shown.
+    // If WebView2 blocks iframe printing, keep the existing native Word
+    // printing pathway available as a safe fallback.
+    try{
+      const frame=previewFrame.current;
+      if(!frame?.contentWindow)throw Error("PDF viewer is not ready");
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    }catch{
+      void action("print");
+    }
+  };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
     <label className="block text-sm font-medium">نوع الوثيقة
@@ -204,7 +218,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ تحضير معاينة مطابقة للقالب…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div><iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
     </>}
   </section>;
 }
