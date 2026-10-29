@@ -315,12 +315,12 @@ function greeting(d: Date | null) {
 
 function Action({ to, title, sub, icon: Icon, tone }: { to: string; title: string; sub: string; icon: typeof Send; tone: string }) {
   return (
-    <Link to={to} className={cn("panel lift group relative flex items-center gap-4 overflow-hidden p-4", tone)}>
+    <Link to={to} title={sub} className={cn("panel lift group relative flex items-center gap-4 overflow-hidden p-4", tone)}>
       <div className="absolute -start-10 -top-10 h-28 w-28 rounded-full opacity-10 tone-dot transition-transform duration-500 group-hover:scale-150" />
       <div className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl shadow-lg tone-solid transition-transform duration-300 group-hover:rotate-[-6deg] group-hover:scale-105"><Icon className="h-7 w-7" /></div>
       <div className="relative min-w-0 flex-1">
         <div className="text-base font-bold md:text-lg">{title}</div>
-        <div className="text-sm text-muted-foreground">{sub}</div>
+
       </div>
       <div className="relative grid h-8 w-8 place-items-center rounded-full bg-muted transition group-hover:-translate-x-1 tone-chip"><ChevronLeft className="h-4 w-4" /></div>
     </Link>
@@ -329,14 +329,14 @@ function Action({ to, title, sub, icon: Icon, tone }: { to: string; title: strin
 
 function Stat({ to, title, value, sub, icon: Icon, tone }: { to: string; title: string; value: number; sub: string; icon: typeof Send; tone: string }) {
   return (
-    <Link to={to} className={cn("lift group relative flex items-center gap-4 overflow-hidden rounded-2xl border p-5 tone-soft", tone)}>
+    <Link to={to} title={sub} className={cn("lift group relative flex items-center gap-4 overflow-hidden rounded-2xl border p-5 tone-soft", tone)}>
       <div className="absolute inset-y-0 start-0 w-1.5 tone-dot" />
       <Icon className="absolute -bottom-4 -end-3 h-24 w-24 opacity-[0.07] tone-text transition-transform duration-500 group-hover:scale-110" />
       <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl tone-chip ring-1 ring-current/10"><Icon className="h-8 w-8" /></div>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-muted-foreground">{title}</div>
         <div className="font-sans text-4xl font-extrabold leading-tight tabular-nums tone-text">{value}</div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground"><BarChart2 className="h-3.5 w-3.5" />{sub}</div>
+        
       </div>
     </Link>
   );
