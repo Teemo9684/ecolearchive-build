@@ -320,6 +320,7 @@ function Action({ to, title, sub, icon: Icon, tone }: { to: string; title: strin
       <div className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl shadow-lg tone-solid transition-transform duration-300 group-hover:rotate-[-6deg] group-hover:scale-105"><Icon className="h-7 w-7" /></div>
       <div className="relative min-w-0 flex-1">
         <div className="text-base font-bold md:text-lg">{title}</div>
+        <div className="text-sm text-muted-foreground">{sub}</div>
 
       </div>
       <div className="relative grid h-8 w-8 place-items-center rounded-full bg-muted transition group-hover:-translate-x-1 tone-chip"><ChevronLeft className="h-4 w-4" /></div>
@@ -336,6 +337,7 @@ function Stat({ to, title, value, sub, icon: Icon, tone }: { to: string; title: 
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-muted-foreground">{title}</div>
         <div className="font-sans text-4xl font-extrabold leading-tight tabular-nums tone-text">{value}</div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground"><BarChart2 className="h-3.5 w-3.5" />{sub}</div>
         
       </div>
     </Link>
