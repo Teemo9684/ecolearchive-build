@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
 import { readApprovedTemplate } from "@/lib/approved-templates";
@@ -35,6 +35,8 @@ export function NativeWordComposer() {
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
+  const previewCache = useRef<{key:string;url:string}|null>(null);
+  const [preparingPreview,setPreparingPreview]=useState(false);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
@@ -109,7 +111,13 @@ export function NativeWordComposer() {
   const action=async(mode:"preview"|"save"|"print")=>{
     if(busy)return;
     setBusy(true);
+    if(mode==="preview")setPreparingPreview(true);
     try{
+      const key=JSON.stringify([selected,values]);
+      if(mode==="preview" && previewCache.current?.key===key){
+        setPreview(previewCache.current.url);
+        return;
+      }
       const output=await ready();
       if(mode==="save"){
         const category=categories[0]?.id;
@@ -127,14 +135,17 @@ export function NativeWordComposer() {
           const pdf = await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
           const bytes=decode64(pdf);
           const blob=new Blob([bytes],{type:"application/pdf"});
-          setPreview(URL.createObjectURL(blob));
+          const url=URL.createObjectURL(blob);
+          if(previewCache.current)URL.revokeObjectURL(previewCache.current.url);
+          previewCache.current={key,url};
+          setPreview(url);
         }else{
           await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
         }
         preserveDirectoryEntries();
       }
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
-    finally{setBusy(false);}
+    finally{setBusy(false);setPreparingPreview(false);}
   };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
@@ -158,10 +169,11 @@ export function NativeWordComposer() {
       <datalist id="native-recipients">{recipients.map(r=><option key={r} value={r}/>)}</datalist>
       <datalist id="native-departments">{departments.map(r=><option key={r} value={r}/>)}</datalist>
       <div className="flex flex-wrap gap-3">
-        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("preview")}>معاينة</button>
+        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("preview")}>{preparingPreview?"جارٍ تجهيز المعاينة…":"معاينة"}</button>
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
+      {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ تحضير معاينة مطابقة للقالب…</p>}
       {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
     </>}
   </section>;
