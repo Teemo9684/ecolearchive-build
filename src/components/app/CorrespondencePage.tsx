@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { preservePreviousWordVersion } from "@/lib/services/documentHistory";
 import { printHtml } from "@/lib/printHtml";
 import { useMemo, useState } from "react";
@@ -214,6 +215,7 @@ export function CorrespondencePage({ direction }: { direction: "in" | "out" }) {
                           <Button size="sm" variant="outline" onClick={async () => { await repo<Correspondence>("correspondences").put({ ...c, deletedAt: null }); await syncCorrespondenceArchive({ ...c, deletedAt: null }, settings); }}><RotateCcw className="h-3.5 w-3.5" />استعادة</Button>
                         ) : (
                           <>
+                            <Link to="/archive" hash={`related:correspondence:${c.id}`} className="rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:bg-muted" title="وثائق المراسلة في الأرشيف">الأرشيف</Link>
                             <Button size="icon" variant="ghost" title="تعديل" onClick={() => open(c)}><Pencil className="h-4 w-4" /></Button>
                             <Button size="icon" variant="ghost" title="طباعة" onClick={() => printSlip(c, settings)}><Printer className="h-4 w-4" /></Button>
                             <Button size="icon" variant="ghost" title="تحرير في Word" onClick={() => editSlipWord(c, settings)}><FileText className="h-4 w-4" /></Button>
