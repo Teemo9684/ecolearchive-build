@@ -1,0 +1,38 @@
+name: Report EcoleArchive CI failures
+on:
+  workflow_run:
+    workflows:
+      - Build signed EcoleArchive v1.0.12 candidate
+      - Publish verified EcoleArchive v1.0.12 signed update
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+  issues: write
+jobs:
+  report-failure:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create searchable failure report with exact run and job IDs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X GET "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" > jobs.json
+          {
+            printf 'Automated CI failure report for EcoleArchive.\n\n'
+            printf 'Workflow: %s\nRun: %s\nRun ID: %s\nAttempt: %s\nBranch: %s\nCommit: %s\n\n' "$WORKFLOW_NAME" "$RUN_URL" "$RUN_ID" "$RUN_ATTEMPT" "$HEAD_BRANCH" "$HEAD_SHA"
+            printf 'Failed jobs (job ID, name, conclusion and failed steps):\n'
+            jq -r '.jobs[] | select(.conclusion=="failure") | "Job ID: \(.id) | \(.name) | \(.conclusion)\n" + ([.steps[]? | select(.conclusion=="failure") | "  Step: \(.name)"] | join("\n"))' jobs.json
+            printf '\nInspect job logs before changing code. Do not publish unsigned or unverified artifacts.\n'
+          } > failure-report.txt
+          gh issue create -R "$REPO" --title "EcoleArchive CI failure: run $RUN_ID attempt $RUN_ATTEMPT" --body-file failure-report.txt
