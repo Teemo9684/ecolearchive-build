@@ -35,6 +35,7 @@ export function NativeWordComposer() {
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
@@ -122,9 +123,14 @@ export function NativeWordComposer() {
       }else{
         const encoded=encode64(new Uint8Array(await bytesOf(output)));
         if(!isDesktopRuntime())throw Error("المعاينة والطباعة تتطلب نسخة Windows");
-        // Native Word opens the resulting DOCX without changing the source template.
-        await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:mode==="print"});
-        if(mode==="preview")setPreview("opened");
+        if(mode==="preview"){
+          const pdf = await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
+          const bytes=decode64(pdf);
+          const blob=new Blob([bytes],{type:"application/pdf"});
+          setPreview(URL.createObjectURL(blob));
+        }else{
+          await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
+        }
         preserveDirectoryEntries();
       }
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
@@ -152,7 +158,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
-      {preview&&<p className="text-xs text-muted-foreground">فُتحت المعاينة في Microsoft Word للمحافظة على تنسيق الوثيقة الأصلي.</p>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
     </>}
   </section>;
 }
