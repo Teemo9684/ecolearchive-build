@@ -132,14 +132,8 @@ export function NativeWordComposer() {
     previewPending.current={key,promise:job};
     try{return await job;}finally{if(previewPending.current?.promise===job)previewPending.current=null;}
   };
-  // Prepare the exact Word-rendered PDF in idle typing time; Preview usually opens instantly.
-  useEffect(()=>{
-    if(!source || !selected || !isDesktopRuntime() || busy)return;
-    const timer=window.setTimeout(()=>{
-      void getPreviewUrl(previewKey).catch(()=>{ /* Errors surface when Preview is requested. */ });
-    },850);
-    return()=>window.clearTimeout(timer);
-  },[source,previewKey,selected]);
+  // Never start Word or PDF conversion while the user edits fields.
+  // Conversion is triggered solely by an explicit Preview click.
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
       const value=values[field]?.trim();
