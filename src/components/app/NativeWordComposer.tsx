@@ -97,10 +97,10 @@ export function NativeWordComposer() {
     // Only templates explicitly containing {رقم_الارسال} receive a sending number.
     // Keep empty optional values blank; use the current calendar year automatically.
     const sendingNumber = (values["رقم_الارسال"] ?? "").trim();
-    const formattedSendingNumber = !sendingNumber ? "" :
-      /^\d+\s*\/\s*م\.\s*ع\.\s*ت\s*\/\s*\d{4}$/.test(sendingNumber)
-        ? sendingNumber
-        : `${sendingNumber}/م. ع. ت/${new Date().getFullYear()}`;
+    const numberOnly = sendingNumber.match(/^(?:رقم الإرسال\s*:\s*)?(\d+)(?:\s*\/\s*م\.\s*ع\.\s*ت\s*\/\s*\d{4})?$/)?.[1] ?? sendingNumber;
+    const formattedSendingNumber = numberOnly
+      ? `رقم الإرسال : ${numberOnly}/ م. ع. ت/ ${new Date().getFullYear()}`
+      : "";
     const data={...values,
       ...(fields.includes("رقم_الارسال")?{"رقم_الارسال":formattedSendingNumber}:{}),
       ...(fields.includes("المجموع")?{"المجموع":String(sum)}:{})};
@@ -168,7 +168,7 @@ export function NativeWordComposer() {
     {source&&<>
       <div className="grid gap-4 md:grid-cols-2">
         {fields.map(key=><label key={key} className="block text-sm font-medium">{key.replaceAll("_"," ")}
-          {key==="رقم_الارسال" && <span className="block text-xs text-muted-foreground">أدخل الرقم فقط (مثل 15)، وسيظهر في الوثيقة: 15/م. ع. ت/{new Date().getFullYear()}. اتركه فارغًا إذا لم يكن مطلوبًا.</span>}
+          {key==="رقم_الارسال" && <span className="block text-xs text-muted-foreground">أدخل الرقم فقط (مثل 15)، وسيظهر في الوثيقة: رقم الإرسال : 15/ م. ع. ت/ {new Date().getFullYear()}. اتركه فارغًا إذا لم يكن مطلوبًا.</span>}
           {/^(?:نص_المراسلة|نص المراسلة|المحتوى|المتن|نص_الوثيقة)$/.test(key.trim()) ? (
             <textarea rows={8} dir="rtl" className="field-select mt-2 block min-h-40 w-full resize-y whitespace-pre-wrap leading-7" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
           ) : (
