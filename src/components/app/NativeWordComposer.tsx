@@ -110,6 +110,8 @@ export function NativeWordComposer() {
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
   const previewKey=JSON.stringify([selected,values]);
+  const latestPreviewKey=useRef(previewKey);
+  latestPreviewKey.current=previewKey;
   // Share a conversion between proactive preparation and the Preview button.
   // The original DOCX is always used by Word for faithful page layout.
   const getPreviewUrl=async(key:string):Promise<string>=>{
@@ -120,7 +122,7 @@ export function NativeWordComposer() {
       const encoded=encode64(new Uint8Array(await bytesOf(output)));
       const pdf=await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
       const url=URL.createObjectURL(new Blob([decode64(pdf)],{type:"application/pdf"}));
-      if(JSON.stringify([selected,values])!==key){URL.revokeObjectURL(url);return "";}
+      if(latestPreviewKey.current!==key){URL.revokeObjectURL(url);return "";}
       const old=previewCache.current;
       previewCache.current={key,url};
       // Do not revoke an in-use PDF until its viewer has been closed.
@@ -133,11 +135,10 @@ export function NativeWordComposer() {
   // Prepare the exact Word-rendered PDF in idle typing time; Preview usually opens instantly.
   useEffect(()=>{
     if(!source || !selected || !isDesktopRuntime() || busy)return;
-    let active=true;
     const timer=window.setTimeout(()=>{
       void getPreviewUrl(previewKey).catch(()=>{ /* Errors surface when Preview is requested. */ });
     },850);
-    return()=>{active=false;window.clearTimeout(timer);};
+    return()=>window.clearTimeout(timer);
   },[source,previewKey,selected]);
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
