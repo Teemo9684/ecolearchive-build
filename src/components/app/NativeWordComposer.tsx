@@ -37,7 +37,9 @@ export function NativeWordComposer() {
   const [preview,setPreview]=useState<string|null>(null);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
-  // Keep the cached PDF blob URL alive when the preview panel is closed.\n  // Revoke it only when replaced or when the document composer unmounts.\n  useEffect(() => () => { if (previewCache.current) URL.revokeObjectURL(previewCache.current.url); }, []);
+  // Closing the preview should never invalidate its cached PDF URL.
+  useEffect(() => () => { if (previewCache.current) URL.revokeObjectURL(previewCache.current.url); }, []);
+  const previewPending = useRef<{key:string;promise:Promise<string>}|null>(null);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
@@ -107,6 +109,36 @@ export function NativeWordComposer() {
     }
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
+  const previewKey=JSON.stringify([selected,values]);
+  // Share a conversion between proactive preparation and the Preview button.
+  // The original DOCX is always used by Word for faithful page layout.
+  const getPreviewUrl=async(key:string):Promise<string>=>{
+    if(previewCache.current?.key===key)return previewCache.current.url;
+    if(previewPending.current?.key===key)return previewPending.current.promise;
+    const job=(async()=>{
+      const output=await ready();
+      const encoded=encode64(new Uint8Array(await bytesOf(output)));
+      const pdf=await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
+      const url=URL.createObjectURL(new Blob([decode64(pdf)],{type:"application/pdf"}));
+      if(JSON.stringify([selected,values])!==key){URL.revokeObjectURL(url);return "";}
+      const old=previewCache.current;
+      previewCache.current={key,url};
+      // Do not revoke an in-use PDF until its viewer has been closed.
+      if(old && old.url!==preview && old.url!==url)URL.revokeObjectURL(old.url);
+      return url;
+    })();
+    previewPending.current={key,promise:job};
+    try{return await job;}finally{if(previewPending.current?.promise===job)previewPending.current=null;}
+  };
+  // Prepare the exact Word-rendered PDF in idle typing time; Preview usually opens instantly.
+  useEffect(()=>{
+    if(!source || !selected || !isDesktopRuntime() || busy)return;
+    let active=true;
+    const timer=window.setTimeout(()=>{
+      void getPreviewUrl(previewKey).catch(()=>{ /* Errors surface when Preview is requested. */ });
+    },850);
+    return()=>{active=false;window.clearTimeout(timer);};
+  },[source,previewKey,selected]);
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
       const value=values[field]?.trim();
@@ -123,9 +155,11 @@ export function NativeWordComposer() {
     setBusy(true);
     if(mode==="preview")setPreparingPreview(true);
     try{
-      const key=JSON.stringify([selected,values]);
-      if(mode==="preview" && previewCache.current?.key===key){
-        setPreview(previewCache.current.url);
+      const key=previewKey;
+      if(mode==="preview"){
+        const url=await getPreviewUrl(key);
+        if(url)setPreview(url);
+        preserveDirectoryEntries();
         return;
       }
       const output=await ready();
@@ -141,17 +175,7 @@ export function NativeWordComposer() {
       }else{
         const encoded=encode64(new Uint8Array(await bytesOf(output)));
         if(!isDesktopRuntime())throw Error("المعاينة والطباعة تتطلب نسخة Windows");
-        if(mode==="preview"){
-          const pdf = await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
-          const bytes=decode64(pdf);
-          const blob=new Blob([bytes],{type:"application/pdf"});
-          const url=URL.createObjectURL(blob);
-          if(previewCache.current)URL.revokeObjectURL(previewCache.current.url);
-          previewCache.current={key,url};
-          setPreview(url);
-        }else{
-          await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
-        }
+        await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
         preserveDirectoryEntries();
       }
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
