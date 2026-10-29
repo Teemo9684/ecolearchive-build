@@ -131,7 +131,7 @@ function Dashboard() {
                     ["الوثائق المؤرشفة", liveDocs.length], ["البريد الوارد", inCount], ["البريد الصادر", outCount],
                     ["ملفات العمال", employees.data.filter(x => !x.deletedAt).length],
                     ["العمال التربويون", teachers.data.filter(x => !x.deletedAt).length],
-                    ["المراسلات قيد المعالجة", tasks.length]
+                    ["المراسلات قيد المعالجة", liveCorr.filter(x => x.status === "pending").length]
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-xl border bg-background p-3 text-center">
                       <div className="text-2xl font-bold text-primary">{value}</div><div className="text-xs text-muted-foreground">{label}</div>
