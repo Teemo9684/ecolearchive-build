@@ -2,7 +2,7 @@ name: Build signed EcoleArchive v1.0.14 candidate
 on:
   push:
     branches:
-      - feature/v1-0-14-gold-only-shine
+      - feature/v1-0-14-visible-gold-shine
     paths:
       - 'src/**'
       - 'desktop/**'
@@ -112,7 +112,7 @@ jobs:
 
   publish-signed-update:
     needs: signed-windows-candidate
-    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/feature/v1-0-14-gold-only-shine'
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/feature/v1-0-14-visible-gold-shine'
     runs-on: ubuntu-latest
     environment: windows-updates
     concurrency:
