@@ -24,7 +24,7 @@ export function DropZone({ onFiles, compact }: { onFiles: (f: File[]) => void; c
     >
       <Upload className="h-6 w-6 text-primary" />
       <div className="text-sm font-semibold">اسحب الملفات هنا أو انقر للاختيار</div>
-      <div className="text-xs text-muted-foreground">PDF، وورد، إكسل، صور — حتى {MAX_FILE_MB} م.ب للملف. يتم حفظ نسخة فقط، ولا يعدل الملف الأصلي.</div>
+      <span className="cursor-help text-xs text-muted-foreground" title={`PDF، Word، Excel، صور؛ الحد ${MAX_FILE_MB} م.ب للملف. يحفظ البرنامج نسخة دون تعديل الأصل.`} aria-label="شروط الملفات">ⓘ صيغ الملفات</span>
       <input ref={ref} type="file" multiple accept={ACCEPT} className="hidden"
         onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) onFiles(f); e.target.value = ""; }} />
     </div>
@@ -161,7 +161,7 @@ export function EditDocDialog({ doc, onClose }: { doc: DocumentRecord | null; on
     <Dialog open={!!doc} onOpenChange={(v) => !v && onClose()}>
       <DialogContent dir="rtl" className="max-w-2xl">
         <DialogHeader className="text-start"><DialogTitle>تعديل البيانات الوصفية</DialogTitle></DialogHeader>
-        <p className="text-xs text-muted-foreground">تعديل العنوان لا يغير اسم الملف الأصلي: {d.fileName ?? "—"}</p>
+        <span className="cursor-help text-xs text-muted-foreground" title={`تعديل العنوان لا يغير اسم الملف الأصلي: ${d.fileName ?? "—"}`} aria-label="معلومة عن اسم الملف">ⓘ</span>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="العنوان" className="sm:col-span-2"><Input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} /></Field>
           <Field label="المرجع"><Input value={d.reference} onChange={(e) => setD({ ...d, reference: e.target.value })} /></Field>
