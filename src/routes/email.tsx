@@ -21,26 +21,28 @@ function EmailCenter() {
   const [to,setTo]=useState("");
   const [subject,setSubject]=useState("");
   const [body,setBody]=useState("");
-  const [drafts,setDrafts]=useState(0);
+
   const draft=()=>{
     if(to.trim()||subject.trim()||body.trim()){
-      setDrafts(n=>n+1);
+
       toast.info("لا يمكن إرسال الرسالة قبل ربط حساب Gmail؛ احتفظ بنصها خارج البرنامج إلى حين تفعيل الاتصال");
     }
     setCompose(false);
   };
+  const [showSetup,setShowSetup]=useState(false);
   return <section className="space-y-5" dir="rtl">
     <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold"><Mail className="h-7 w-7"/> البريد الإلكتروني</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gmail المدرسي</p>
       </div>
-      <button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button>
+      <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold" onClick={()=>setShowSetup(v=>!v)}>ربط حساب Gmail</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
     </div>
     <div className="panel flex items-start gap-2 border-amber-300 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
       <div className="text-sm"><strong>Gmail غير متصل بعد.</strong> يتم الربط عبر تسجيل الدخول الرسمي من Google على كمبيوتر المدرسة. لا تدخل كلمة مرور الحساب هنا؛ الإرسال والاستقبال غير متاحين حتى اكتمال الإعداد.</div>
     </div>
+    {showSetup&&<div className="panel space-y-2 p-4 text-sm"><h2 className="font-bold">إعداد ربط Gmail الآمن</h2><p>يستلزم الربط إعداد Google OAuth 2.0 من نوع Desktop App، وإنشاء Client ID خاص بالمنظومة. تسجيل الدخول المباشر غير متاح حتى يكتمل اتصال Google API؛ هذا الزر لا يطلب كلمة السر ولا يرسل بيانات الحساب.</p><a className="text-primary underline" href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer">إعداد Gmail API عبر Google Cloud</a></div>}
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
         {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
