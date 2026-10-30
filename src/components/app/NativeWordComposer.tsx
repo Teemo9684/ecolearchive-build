@@ -1,3 +1,4 @@
+import { renderAsync } from "docx-preview";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
@@ -36,6 +37,8 @@ export function NativeWordComposer() {
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
   const previewFrame=useRef<HTMLIFrameElement|null>(null);
+  const fastPreviewContainer=useRef<HTMLDivElement|null>(null);
+  const fastDoc=useRef<{key:string;bytes:ArrayBuffer}|null>(null);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
   // Closing the preview should never invalidate its cached PDF URL.
@@ -133,6 +136,26 @@ export function NativeWordComposer() {
     previewPending.current={key,promise:job};
     try{return await job;}finally{if(previewPending.current?.promise===job)previewPending.current=null;}
   };
+  // Render DOCX locally inside WebView2 only after an explicit Preview click.
+  // Avoid launching Word, PowerShell or any network requests.
+  useEffect(()=>{
+    if(preview!=="local" || !fastDoc.current || !fastPreviewContainer.current)return;
+    let cancelled=false;
+    const host=fastPreviewContainer.current;
+    host.replaceChildren();
+    renderAsync(fastDoc.current.bytes,host,host,{
+      inWrapper:true,ignoreWidth:false,ignoreHeight:false,
+      breakPages:true,renderHeaders:true,renderFooters:true
+    }).catch(async(error)=>{
+      if(cancelled)return;
+      toast.error("تعذر العرض السريع، سيتم استخدام معاينة Word الدقيقة: "+String(error));
+      try{
+        const url=await getPreviewUrl(fastDoc.current!.key);
+        if(!cancelled && url)setPreview(url);
+      }catch(e){if(!cancelled)toast.error(String(e));}
+    });
+    return()=>{cancelled=true;};
+  },[preview]);
   // Never start Word or PDF conversion while the user edits fields.
   // Conversion is triggered solely by an explicit Preview click.
   const preserveDirectoryEntries=()=>{
@@ -153,8 +176,11 @@ export function NativeWordComposer() {
     try{
       const key=previewKey;
       if(mode==="preview"){
-        const url=await getPreviewUrl(key);
-        if(url)setPreview(url);
+        if(fastDoc.current?.key!==key){
+          const generated=await ready();
+          fastDoc.current={key,bytes:await bytesOf(generated)};
+        }
+        setPreview("local");
         preserveDirectoryEntries();
         return;
       }
@@ -218,7 +244,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div><iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div>{preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
     </>}
   </section>;
 }
