@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EmailRouteImport } from './routes/email'
 import { Route as AdminFilesRouteImport } from './routes/admin-files'
 import { Route as ArchiveRouteImport } from './routes/archive'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -25,6 +26,11 @@ import { Route as MailOutgoingRouteImport } from './routes/mail.outgoing'
 import { Route as TeachersIndexRouteImport } from './routes/teachers.index'
 import { Route as TeachersIdRouteImport } from './routes/teachers.$id'
 
+const EmailRoute = EmailRouteImport.update({
+  id: '/email',
+  path: '/email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -104,6 +110,7 @@ const TeachersIdRoute = TeachersIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin-files': typeof AdminFilesRoute
+  '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
   '/reports': typeof ReportsRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin-files': typeof AdminFilesRoute
+  '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
   '/reports': typeof ReportsRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin-files': typeof AdminFilesRoute
+  '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
   '/reports': typeof ReportsRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin-files'
+    | '/email'
     | '/archive'
     | '/inventory'
     | '/reports'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin-files'
+    | '/email'
     | '/archive'
     | '/inventory'
     | '/reports'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin-files'
+    | '/email'
     | '/archive'
     | '/inventory'
     | '/reports'
@@ -210,6 +222,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminFilesRoute: typeof AdminFilesRoute
+  EmailRoute: typeof EmailRoute
   ArchiveRoute: typeof ArchiveRoute
   InventoryRoute: typeof InventoryRoute
   ReportsRoute: typeof ReportsRoute
@@ -239,6 +252,13 @@ declare module '@tanstack/react-router' {
       path: '/admin-files'
       fullPath: '/admin-files'
       preLoaderRoute: typeof AdminFilesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/email': {
+      id: '/email'
+      path: '/email'
+      fullPath: '/email'
+      preLoaderRoute: typeof EmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/archive': {
@@ -338,6 +358,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminFilesRoute: AdminFilesRoute,
+  EmailRoute: EmailRoute,
   ArchiveRoute: ArchiveRoute,
   InventoryRoute: InventoryRoute,
   ReportsRoute: ReportsRoute,
