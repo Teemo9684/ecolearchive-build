@@ -39,6 +39,8 @@ export function NativeWordComposer() {
   const previewFrame=useRef<HTMLIFrameElement|null>(null);
   const fastPreviewContainer=useRef<HTMLDivElement|null>(null);
   const fastDoc=useRef<{key:string;bytes:ArrayBuffer}|null>(null);
+  const [accuratePreviewLoading,setAccuratePreviewLoading]=useState(false);
+  const preciseSequence=useRef(0);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
   // Closing the preview should never invalidate its cached PDF URL.
@@ -143,17 +145,11 @@ export function NativeWordComposer() {
     let cancelled=false;
     const host=fastPreviewContainer.current;
     host.replaceChildren();
-    renderAsync(fastDoc.current.bytes,host,host,{
+    // Never silently treat HTML approximation as a print-accurate document.
+    void renderAsync(fastDoc.current.bytes,host,host,{
       inWrapper:true,ignoreWidth:false,ignoreHeight:false,
       breakPages:true,renderHeaders:true,renderFooters:true
-    }).catch(async(error)=>{
-      if(cancelled)return;
-      toast.error("تعذر العرض السريع، سيتم استخدام معاينة Word الدقيقة: "+String(error));
-      try{
-        const url=await getPreviewUrl(fastDoc.current!.key);
-        if(!cancelled && url)setPreview(url);
-      }catch(e){if(!cancelled)toast.error(String(e));}
-    });
+    }).catch(error=>{if(!cancelled)toast.error("تعذر عرض المعاينة السريعة: "+String(error));});
     return()=>{cancelled=true;};
   },[preview]);
   // Never start Word or PDF conversion while the user edits fields.
@@ -180,7 +176,23 @@ export function NativeWordComposer() {
           const generated=await ready();
           fastDoc.current={key,bytes:await bytesOf(generated)};
         }
-        setPreview("local");
+        const sequence=++preciseSequence.current;
+        // Immediate approximate view; replace it with the authoritative Word PDF.
+        // PDF is cached by document content both in the UI and Rust layer.
+        if(previewCache.current?.key===key){
+          setPreview(previewCache.current.url);
+          setAccuratePreviewLoading(false);
+        }else{
+          setPreview("local");
+          setAccuratePreviewLoading(true);
+          void getPreviewUrl(key).then(url=>{
+            if(sequence===preciseSequence.current&&url&&latestPreviewKey.current===key)setPreview(url);
+          }).catch(error=>{
+            if(sequence===preciseSequence.current)toast.error("تعذر إعداد المعاينة الدقيقة: "+String(error));
+          }).finally(()=>{
+            if(sequence===preciseSequence.current)setAccuratePreviewLoading(false);
+          });
+        }
         preserveDirectoryEntries();
         return;
       }
@@ -244,7 +256,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة الوثيقة قبل الطباعة</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div>{preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>{accuratePreviewLoading?"معاينة سريعة مؤقتة — جارٍ تحضير نسخة Word الدقيقة…":"معاينة الوثيقة قبل الطباعة"}</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={preview==="local"?()=>void action("print"):printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>{preciseSequence.current++;setAccuratePreviewLoading(false);setPreview(null);}}>إغلاق المعاينة</button></div></div>{preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
     </>}
   </section>;
 }
