@@ -1,5 +1,6 @@
 import { renderAsync } from "docx-preview";
 import { SchoolCertificateA4 } from "./SchoolCertificateA4";
+import { PrintReviewDialog } from "./PrintReviewDialog";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
@@ -37,6 +38,7 @@ export function NativeWordComposer() {
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
+  const [printReview,setPrintReview]=useState(false);
   const previewFrame=useRef<HTMLIFrameElement|null>(null);
   const fastPreviewContainer=useRef<HTMLDivElement|null>(null);
   const fastDoc=useRef<{key:string;bytes:ArrayBuffer}|null>(null);
@@ -169,6 +171,7 @@ export function NativeWordComposer() {
   };
   const action=async(mode:"preview"|"save"|"print")=>{
     if(busy)return;
+    if(mode==="print"){setPrintReview(true);return;}
     setBusy(true);
     if(mode==="preview")setPreparingPreview(true);
     try{
@@ -224,6 +227,19 @@ export function NativeWordComposer() {
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
     finally{setBusy(false);setPreparingPreview(false);}
   };
+  const confirmNativePrint=async()=>{
+    if(busy)return;
+    setBusy(true);
+    try{
+      const output=await ready();
+      const encoded=encode64(new Uint8Array(await bytesOf(output)));
+      if(!isDesktopRuntime())throw Error("الطباعة تتطلب نسخة Windows");
+      await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
+      preserveDirectoryEntries();
+      setPrintReview(false);
+    }catch(e){toast.error(String(e instanceof Error?e.message:e));}
+    finally{setBusy(false);}
+  };
   const printPreview=()=>{
     // The embedded PDF viewer prints the exact PDF currently shown.
     // If WebView2 blocks iframe printing, keep the existing native Word
@@ -238,6 +254,7 @@ export function NativeWordComposer() {
     }
   };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
+    {printReview&&<PrintReviewDialog selected={selected} values={values} busy={busy} onClose={()=>setPrintReview(false)} onConfirm={()=>void confirmNativePrint()}/> }
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
     <label className="block text-sm font-medium">نوع الوثيقة
       <select className="field-select mt-2 block w-full" value={selected} disabled={busy||loading} onChange={e=>setSelected(e.target.value)}>
