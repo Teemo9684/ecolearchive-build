@@ -1,0 +1,200 @@
+name: Build signed EcoleArchive v1.0.20 candidate
+on:
+  push:
+    branches:
+      - release/v1-0-20-fast-docx-gmail-setup
+    paths:
+      - 'src/**'
+      - 'desktop/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/build-v1-0-20.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  signed-windows-candidate:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - uses: oven-sh/setup-bun@v2
+      - name: Restore reviewed binary assets
+        shell: pwsh
+        run: |
+          foreach ($item in @('public/favicon.png', 'src/assets/logo-book.png', 'src/assets/heritage-original.jpg', 'src/assets/hero-school.jpg')) {
+            $encoded = Get-Content -Raw ($item + '.b64')
+            $bytes = [Convert]::FromBase64String($encoded.Trim())
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $item), $bytes)
+          }
+          $logoBytes = [Convert]::FromBase64String((Get-Content 'src/assets/school-logo.png.b64' -Raw).Trim())
+          $sha = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($logoBytes)).ToLowerInvariant()
+          if ($sha -ne 'e041842461eb767242d564e2119311c16c3239c1ca17fbf1444273d9f45f760d') { throw 'Original Lovable logo SHA256 mismatch' }
+          [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) 'src/assets/school-logo.png'), $logoBytes)
+      - name: Generate gold-only mask for approved homepage logo
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check Pillow
+          if ($LASTEXITCODE -ne 0) { throw 'Pillow installation failed' }
+          python scripts/generate-gold-mask.py
+          if ($LASTEXITCODE -ne 0) { throw 'Gold mask generation failed' }
+      - name: Check release version consistency
+        shell: pwsh
+        run: |
+          $npm = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauri = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path desktop/src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if ($npm -ne "1.0.20" -or $tauri -ne "1.0.20" -or $cargo -ne "1.0.20") { throw "Version mismatch" }
+      - name: Install dependencies
+        run: bun install
+      - name: Test archive with machine-readable diagnostics
+        shell: pwsh
+        run: |
+          bunx vitest run --reporter=default --reporter=junit --outputFile.junit=vitest-results.xml
+          if ($LASTEXITCODE -ne 0) { throw "Archive tests failed; see test report artifact and this job log." }
+      - name: Preserve test diagnostics even if tests fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EcoleArchive-1.0.20-vitest-results
+          path: vitest-results.xml
+          if-no-files-found: warn
+      - name: Build offline frontend
+        run: bun run desktop:build
+      - name: Generate Windows icons from restored school logo
+        run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
+      - name: Compile desktop Rust
+        working-directory: desktop/src-tauri
+        run: cargo check
+      - name: Validate updater signing configuration
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "Missing Tauri signing key; refusing unsigned build." }
+      - name: Build signed Windows installer
+        working-directory: desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bunx @tauri-apps/cli@2 build --bundles nsis
+      - name: Prepare signed updater manifest
+        run: node desktop/updates/prepare-release.mjs
+      - name: Verify installer, signature, and manifest
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*1.0.20*.exe)
+          if ($exe.Count -ne 1 -or $exe[0].Length -lt 1000000) { throw "Expected one non-empty 1.0.20 installer" }
+          $sig = $exe[0].FullName + ".sig"
+          if (-not (Test-Path $sig) -or -not (Test-Path desktop/update-release/latest.json)) { throw "Missing updater signing artifacts" }
+          $manifest = Get-Content desktop/update-release/latest.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne "1.0.20") { throw "Invalid manifest version" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EcoleArchive-1.0.20-signed-candidate
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/nsis/*.exe.sig
+            desktop/update-release/latest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-signed-update:
+    needs: signed-windows-candidate
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-20-fast-docx-gmail-setup'
+    runs-on: ubuntu-latest
+    environment: windows-updates
+    concurrency:
+      group: official-v1-0-20-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download signed candidate from THIS successful build
+        uses: actions/download-artifact@v4
+        with:
+          name: EcoleArchive-1.0.20-signed-candidate
+          path: verified
+      - name: Confirm expected release version and release credentials
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" || { echo "::error::Missing GH_RELEASE_TOKEN"; exit 1; }
+          test "$(node -p "require('./package.json').version")" = "1.0.20"
+          test "$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")" = "1.0.20"
+      - name: Validate installer, matching signature and Tauri update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t EXES < <(find verified -type f -iname '*1.0.20*.exe')
+          test "${#EXES[@]}" -eq 1 || { echo "::error::Expected exactly one v1.0.20 installer"; exit 1; }
+          EXE="${EXES[0]}"
+          test "$(stat -c%s "$EXE")" -gt 1000000
+          test -s "$EXE.sig"
+          MANIFEST="$(find verified -type f -name latest.json | head -1)"
+          test -n "$MANIFEST" && test -s "$MANIFEST"
+          mkdir -p release-verified
+          cp "$EXE" release-verified/EcoleArchive-1.0.20-x64-setup.exe
+          cp "$EXE.sig" release-verified/EcoleArchive-1.0.20-x64-setup.exe.sig
+          cp "$MANIFEST" release-verified/latest.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const dir="release-verified";
+            const m=JSON.parse(fs.readFileSync(dir+"/latest.json","utf8"));
+            const signature=fs.readFileSync(dir+"/EcoleArchive-1.0.20-x64-setup.exe.sig","utf8").trim();
+            const p=m.platforms?.["windows-x86_64"];
+            const url="https://github.com/Teemo9684/ecolearchive-updates/releases/download/v1.0.20/EcoleArchive-1.0.20-x64-setup.exe";
+            if(m.version!=="1.0.20" || !p || p.signature!==signature || p.url!==url || signature.length<50) process.exit(2);
+          '
+          sha256sum release-verified/* | tee release-sha256.txt
+      - name: Prevent duplicate publication of an existing version
+        id: existing-release
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.20 -R Teemo9684/ecolearchive-updates --json isDraft,assets > /tmp/existing-release.json 2>/dev/null; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "::warning::v1.0.20 already exists. This build was verified, but its assets will NOT replace the published release. A new version is required for a new update."
+            jq -e '([.assets[].name] | index("EcoleArchive-1.0.20-x64-setup.exe") != null and index("EcoleArchive-1.0.20-x64-setup.exe.sig") != null and index("latest.json") != null)' /tmp/existing-release.json
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create draft release and upload exact verified signed bytes
+        if: steps.existing-release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO=Teemo9684/ecolearchive-updates
+          if gh release view v1.0.20 -R "$REPO" >/dev/null 2>&1; then
+            echo "::error::v1.0.20 already exists. Refusing overwrite of release assets."
+            exit 1
+          fi
+          gh release create v1.0.20 release-verified/EcoleArchive-1.0.20-x64-setup.exe release-verified/EcoleArchive-1.0.20-x64-setup.exe.sig release-verified/latest.json -R "$REPO" --draft --title 'EcoleArchive v1.0.20' --notes 'تحسين لمعان الشعار الذهبي في الصفحة الرئيسية دون تغيير وظائف المنظومة.'
+          gh release view v1.0.20 -R "$REPO" --json isDraft,assets > /tmp/release.json
+          jq -e '.isDraft == true and ([.assets[].name] | (index("EcoleArchive-1.0.20-x64-setup.exe") != null and index("EcoleArchive-1.0.20-x64-setup.exe.sig") != null and index("latest.json") != null))' /tmp/release.json
+      - name: Publish signed update after draft verification
+        if: steps.existing-release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit v1.0.20 -R Teemo9684/ecolearchive-updates --draft=false --latest
+          gh release view v1.0.20 -R Teemo9684/ecolearchive-updates --json isDraft,url,assets | tee published.json
+          jq -e '.isDraft == false' published.json
