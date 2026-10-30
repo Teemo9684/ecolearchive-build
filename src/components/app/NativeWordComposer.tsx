@@ -1,4 +1,5 @@
 import { renderAsync } from "docx-preview";
+import { SchoolCertificateA4 } from "./SchoolCertificateA4";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
@@ -115,6 +116,7 @@ export function NativeWordComposer() {
     }
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
+  const certificateTemplate=/شهادة\s*مدرسية/i.test(selected);
   const previewKey=JSON.stringify([selected,values]);
   const latestPreviewKey=useRef(previewKey);
   latestPreviewKey.current=previewKey;
@@ -172,6 +174,13 @@ export function NativeWordComposer() {
     try{
       const key=previewKey;
       if(mode==="preview"){
+        if(certificateTemplate){
+          ++preciseSequence.current;
+          setAccuratePreviewLoading(false);
+          setPreview("certificate-a4");
+          preserveDirectoryEntries();
+          return;
+        }
         if(fastDoc.current?.key!==key){
           const generated=await ready();
           fastDoc.current={key,bytes:await bytesOf(generated)};
@@ -256,7 +265,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>{accuratePreviewLoading?"معاينة سريعة مؤقتة — جارٍ تحضير نسخة Word الدقيقة…":"معاينة الوثيقة قبل الطباعة"}</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={preview==="local"?()=>void action("print"):printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>{preciseSequence.current++;setAccuratePreviewLoading(false);setPreview(null);}}>إغلاق المعاينة</button></div></div>{preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>{accuratePreviewLoading?"معاينة سريعة مؤقتة — جارٍ تحضير نسخة Word الدقيقة…":"معاينة الوثيقة قبل الطباعة"}</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={preview==="local"||preview==="certificate-a4"?()=>void action("print"):printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>{preciseSequence.current++;setAccuratePreviewLoading(false);setPreview(null);}}>إغلاق المعاينة</button></div></div>{preview==="certificate-a4" ? <div className="h-[70vh] min-h-[500px] overflow-auto rounded-lg bg-gray-100 p-3"><SchoolCertificateA4 data={values}/></div> : preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
     </>}
   </section>;
 }
