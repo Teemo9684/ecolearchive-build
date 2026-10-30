@@ -516,7 +516,12 @@ fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result
 }
 
 #[tauri::command]
-fn preview_generated_docx_pdf(base64: String) -> Result<String, String> {
+async fn preview_generated_docx_pdf(base64: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || preview_generated_docx_pdf_blocking(base64))
+        .await.map_err(|e| format!("Preview worker failed: {}", e))?
+}
+
+fn preview_generated_docx_pdf_blocking(base64: String) -> Result<String, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(base64).map_err(|_| "Invalid DOCX payload")?;
