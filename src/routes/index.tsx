@@ -59,12 +59,15 @@ function Dashboard() {
         .catch(() => { /* offline or updater unavailable: preserve existing alerts */ });
     };
     check();
-    const timer = window.setInterval(check, 60 * 1000);
+    const timer = window.setInterval(check, 30 * 1000);
     const onFocus=()=>check();
     window.addEventListener("focus",onFocus);
     document.addEventListener("visibilitychange",onFocus);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onFocus); };
   }, []);
+  useEffect(() => {
+    if(alertsOpen && isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("check_desktop_update").then(v=>setAvailableUpdate(typeof v==="string" && v?v:null)).catch(()=>{});
+  },[alertsOpen]);
   useEffect(() => {
     if (!infoOpen && !alertsOpen) return;
     const onKey = (event: KeyboardEvent) => {
