@@ -2,7 +2,7 @@ name: Build signed EcoleArchive v1.0.24 candidate
 on:
   push:
     branches:
-      - release/v1-0-24-persistent-word-preview
+      - release/v1-0-24-word-worker-fix
     paths:
       - 'src/**'
       - 'desktop/**'
@@ -112,7 +112,7 @@ jobs:
 
   publish-signed-update:
     needs: signed-windows-candidate
-    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-24-persistent-word-preview'
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-24-word-worker-fix'
     runs-on: ubuntu-latest
     environment: windows-updates
     concurrency:
