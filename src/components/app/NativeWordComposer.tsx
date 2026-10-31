@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { NativeDocxPreview } from "./NativeDocxPreview";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
 import { readApprovedTemplate } from "@/lib/approved-templates";
@@ -25,7 +24,7 @@ function encode64(bytes:Uint8Array):string {
   return btoa(out);
 }
 
-/** One-page everyday workflow: choose document type, fill fields, preview, save, print. */
+/** Everyday workflow: fill DOCX fields, archive, or review and print using Microsoft Word. */
 export function NativeWordComposer() {
   const settings=useSettings();
   const {data:categories}=useCollection<ArchiveCategory>("archiveCategories");
@@ -35,9 +34,6 @@ export function NativeWordComposer() {
   const [fields,setFields]=useState<string[]>([]);
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
-  const [preview,setPreview]=useState<File|null>(null);
-  const [printReview,setPrintReview]=useState(false);
-  const [preparingPreview,setPreparingPreview]=useState(false);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
@@ -57,17 +53,17 @@ export function NativeWordComposer() {
     window.addEventListener("focus",scan);
     return ()=>{mounted=false;window.removeEventListener("focus",scan);};
   },[]);
-  useEffect(()=>{if(!selected||!isDesktopRuntime()){setSource(null);setFields([]);setPreview(null);return;}
+  useEffect(()=>{if(!selected||!isDesktopRuntime()){setSource(null);setFields([]);return;}
     let active=true;
     const run=async()=>{
-      setBusy(true); setPreview(null); setSource(null);setFields([]);
+      setBusy(true);  setSource(null);setFields([]);
       try{
         const encoded=await window.__TAURI_INTERNALS__!.invoke("read_user_word_template",{name:selected}) as string;
         const file=new File([decode64(encoded)],selected,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
         await readApprovedTemplate(file);
         const names=extractApprovedDocxFields(await bytesOf(file));
         // Ordinary DOCX files are valid templates too. If no placeholders exist,
-        // offer preview/save/print with the original layout unchanged.
+        // offer save/print with the original layout unchanged.
         if(!active)return;
         const auto:Record<string,string>={
           "المدرسة":settings.schoolName,"المدينة":settings.city,"الولاية":settings.wilaya,
@@ -118,28 +114,10 @@ export function NativeWordComposer() {
     store("ecolearchive-recipients","المرسل_إليه",recipients,setRecipients);
     store("ecolearchive-departments","المصلحة",departments,setDepartments);
   };
-  const action=async(mode:"preview"|"save"|"print")=>{
+  const action=async(mode:"save"|"print")=>{
     if(busy)return;
-    if(mode==="print"){
-      setPreparingPreview(true);
-      setBusy(true);
-      try{
-        const file=await ready();
-        setPreview(file);
-        setPrintReview(true);
-        preserveDirectoryEntries();
-      }catch(e){toast.error(String(e instanceof Error?e.message:e));}
-      finally{setBusy(false);setPreparingPreview(false);}
-      return;
-    }
     setBusy(true);
-    if(mode==="preview")setPreparingPreview(true);
     try{
-      if(mode==="preview"){
-        setPreview(await ready());
-        preserveDirectoryEntries();
-        return;
-      }
       const output=await ready();
       if(mode==="save"){
         const category=categories[0]?.id;
@@ -153,27 +131,13 @@ export function NativeWordComposer() {
       }else{
         const encoded=encode64(new Uint8Array(await bytesOf(output)));
         if(!isDesktopRuntime())throw Error("المعاينة والطباعة تتطلب نسخة Windows");
-        await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
+        await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:false});
         preserveDirectoryEntries();
       }
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
-    finally{setBusy(false);setPreparingPreview(false);}
-  };
-  const openExactInWord=async()=>{
-    try {
-      const output=await ready();
-      const base64=encode64(new Uint8Array(await bytesOf(output)));
-      await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64,fileName:output.name,print:false});
-    } catch(e) { toast.error("تعذر فتح الوثيقة في Word: "+String(e instanceof Error?e.message:e)); }
-  };
-  const confirmNativePrint=()=>{
-    const frame=document.getElementById("ecolearchive-print-frame") as HTMLIFrameElement|null;
-    if(!frame?.contentWindow){toast.error("لم تجهز المعاينة بعد");return;}
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
+    finally{setBusy(false);}
   };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
-    {printReview&&preview&&<div role="dialog" aria-modal="true" aria-label="مراجعة الطباعة" className="fixed inset-0 z-[90] bg-black/60 p-3 flex items-center justify-center"><div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-xl"><div className="flex items-center justify-between gap-3 border-b p-4"><strong>مراجعة DOCX قبل الطباعة — {selected.replace(/\\.docx$/i,"")}</strong><button className="rounded-md border px-3 py-2" onClick={()=>setPrintReview(false)}>إغلاق</button></div><p className="px-4 py-2 text-xs text-amber-700">العرض والطباعة بالمحرك الداخلي، وقد تختلف بعض تفاصيل DOCX المعقدة عن Word. راجع الصفحات قبل الطباعة الرسمية.</p><div className="min-h-0 flex-1 bg-muted p-2"><NativeDocxPreview file={preview} printFrame /></div><div className="border-t p-3"><button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={confirmNativePrint}>فتح نافذة الطباعة</button></div></div></div>}
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
     <label className="block text-sm font-medium">نوع الوثيقة
       <select className="field-select mt-2 block w-full" value={selected} disabled={busy||loading} onChange={e=>setSelected(e.target.value)}>
@@ -187,21 +151,18 @@ export function NativeWordComposer() {
         {fields.map(key=><label key={key} className="block text-sm font-medium">{key.replaceAll("_"," ")}
           {key==="رقم_الارسال" && <span className="cursor-help text-xs text-muted-foreground" title={`أدخل الرقم فقط مثل 15؛ وسيظهر رقم الإرسال : 15/ م. ع. ت/ ${new Date().getFullYear()}. يمكن ترك الحقل فارغًا.`} aria-label="مساعدة رقم الإرسال"> ⓘ</span>}
           {/^(?:نص_المراسلة|نص المراسلة|المحتوى|المتن|نص_الوثيقة)$/.test(key.trim()) ? (
-            <textarea rows={8} dir="rtl" className="field-select mt-2 block min-h-40 w-full resize-y whitespace-pre-wrap leading-7" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+            <textarea rows={8} dir="rtl" className="field-select mt-2 block min-h-40 w-full resize-y whitespace-pre-wrap leading-7" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));}} />
           ) : (
-            <input list={key==="المرسل_إليه"?"native-recipients":key==="المصلحة"?"native-departments":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));setPreview(null);}} />
+            <input list={key==="المرسل_إليه"?"native-recipients":key==="المصلحة"?"native-departments":undefined} className="field-select mt-2 block w-full" value={values[key]??""} onChange={e=>{setValues(v=>({...v,[key]:e.target.value}));}} />
           )}
         </label>)}
       </div>
       <datalist id="native-recipients">{recipients.map(r=><option key={r} value={r}/>)}</datalist>
       <datalist id="native-departments">{departments.map(r=><option key={r} value={r}/>)}</datalist>
       <div className="flex flex-wrap gap-3">
-        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("preview")}>{preparingPreview?"جارٍ تجهيز المعاينة…":"معاينة"}</button>
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
-        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>{preparingPreview?"جارٍ تجهيز PDF…":"طباعة"}</button>
+        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>{"طباعة عبر Word"}</button>
       </div>
-      {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&!printReview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة DOCX الداخلية (دون Word)</span><div className="flex gap-2"><button className="rounded-md border px-3 py-1" onClick={()=>void openExactInWord()}>فتح التصميم الأصلي في Word</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div><div className="h-[70vh] min-h-[500px]"><NativeDocxPreview file={preview} /></div></div>}
     </>}
   </section>;
 }
