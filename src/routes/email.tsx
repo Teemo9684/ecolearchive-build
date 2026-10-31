@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isDesktopRuntime } from "@/lib/db/desktop";
 import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +33,26 @@ function EmailCenter() {
   const [showSetup,setShowSetup]=useState(false);
   const [accountMenu,setAccountMenu]=useState(false);
   const [provider,setProvider]=useState<"gmail"|"outlook">("gmail");
+  const [gmailEmail,setGmailEmail]=useState<string|null>(null);
+  const [connecting,setConnecting]=useState(false);
+  const [clientId,setClientId]=useState(()=>localStorage.getItem("ecolearchive-google-desktop-client-id")||"");
+  useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
+  const connectGmail=async()=>{
+    if(!isDesktopRuntime()){toast.error("تسجيل الدخول يعمل فقط في نسخة Windows");return;}
+    if(!clientId.endsWith(".apps.googleusercontent.com")){toast.error("أدخل Client ID لتطبيق Google Desktop");return;}
+    setConnecting(true);
+    try {
+      localStorage.setItem("ecolearchive-google-desktop-client-id",clientId.trim());
+      const email=await window.__TAURI_INTERNALS__!.invoke("gmail_connect",{clientId:clientId.trim()}) as string;
+      setGmailEmail(email);setShowSetup(false);toast.success("تم ربط الحساب: "+email);
+    }catch(e){toast.error("تعذر ربط Gmail: "+String(e));}
+    finally{setConnecting(false);}
+  };
+  const signOut=async()=>{
+    if(!isDesktopRuntime())return;
+    try{await window.__TAURI_INTERNALS__!.invoke("gmail_sign_out");setGmailEmail(null);toast.success("تم فصل Gmail من البرنامج");}
+    catch(e){toast.error(String(e));}
+  };
   return <section className="space-y-5" dir="rtl">
     <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
       <div>
@@ -40,12 +61,12 @@ function EmailCenter() {
       </div>
       <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold flex items-center gap-2" onClick={()=>setAccountMenu(v=>!v)}><ChevronDown className="h-4 w-4"/> إدارة الحسابات</button><button className="rounded-xl border px-4 py-3 font-semibold" onClick={()=>setShowSetup(v=>!v)}>إضافة حساب</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
     </div>
-    {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">لا يوجد حساب متصل حاليًا. لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setShowSetup(true);setAccountMenu(false);}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 opacity-50" title="يتفعّل تسجيل الخروج بعد الاتصال الحقيقي"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
+    {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">{gmailEmail?`الحساب المرتبط: ${gmailEmail}`:"لا يوجد حساب متصل حاليًا."} لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setShowSetup(true);setAccountMenu(false);}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled={!gmailEmail||connecting} onClick={()=>void signOut()} className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 disabled:opacity-50"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
     <div className="panel flex items-start gap-2 border-amber-300 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
-      <div className="text-sm"><strong>Gmail غير متصل بعد.</strong> يتم الربط عبر تسجيل الدخول الرسمي من Google على كمبيوتر المدرسة. لا تدخل كلمة مرور الحساب هنا؛ الإرسال والاستقبال غير متاحين حتى اكتمال الإعداد.</div>
+      <div className="text-sm"><strong>{gmailEmail?`متصل بحساب ${gmailEmail}`:"Gmail غير متصل بعد."}</strong> {gmailEmail?"تم منح الموافقة لتطبيق Windows. عرض الرسائل وإرسالها سيُفعّلان بعد توصيل واجهة Gmail API.":"اضغط «إضافة حساب»، ووافق عبر صفحة Google الرسمية. لن يطلب البرنامج كلمة مرورك."}</div>
     </div>
-    {showSetup&&<div className="panel space-y-3 p-4 text-sm"><h2 className="font-bold">إضافة حساب بريد إلكتروني</h2><p className="text-muted-foreground">اختر مزود البريد. لن يطلب منك EcoleArchive كلمة السر؛ الربط الآمن يحتاج تهيئة OAuth في تطبيق Windows أولًا.</p><div className="flex gap-2"><button className={`rounded-lg px-4 py-2 border ${provider==="gmail"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("gmail")}>Gmail</button><button className={`rounded-lg px-4 py-2 border ${provider==="outlook"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("outlook")}>Outlook</button></div><div className="rounded-lg border bg-muted/40 p-3"><strong>حالة الربط: غير مهيّأ</strong><p className="mt-1 text-muted-foreground">لا تتوفر في هذه النسخة خدمة استقبال رمز التفويض وحفظ جلسة الحساب بشكل آمن. لن نفتح تسجيل دخول وهميًا أو نخزن رمزًا في localStorage.</p><a className="mt-2 inline-flex items-center gap-1 font-semibold text-primary underline" href={provider==="gmail"?"https://console.cloud.google.com/apis/credentials":"https://entra.microsoft.com/"} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4"/> إعداد {provider==="gmail"?"Google OAuth Desktop":"Microsoft Entra App Registration"}</a></div><button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
+    {showSetup&&<div className="panel space-y-3 p-4 text-sm"><h2 className="font-bold">ربط البريد الإلكتروني</h2><div className="flex gap-2"><button className={`rounded-lg px-4 py-2 border ${provider==="gmail"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("gmail")}>Gmail</button><button className={`rounded-lg px-4 py-2 border ${provider==="outlook"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("outlook")}>Outlook (لاحقًا)</button></div>{provider==="gmail"?<><p>أدخل معرّف OAuth من Google Cloud بنوع Desktop App مرة واحدة. هذا معرّف عام وليس كلمة سر.</p><label className="block">Google Client ID<input value={clientId} onChange={e=>setClientId(e.target.value)} dir="ltr" className="field-select mt-1 w-full" placeholder="xxxx.apps.googleusercontent.com"/></label><button disabled={connecting||!clientId.trim()} onClick={()=>void connectGmail()} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">{connecting?"بانتظار موافقة Google في المتصفح…":"المتابعة عبر Google"}</button><p className="text-xs text-muted-foreground">بعد الموافقة يعود الاتصال تلقائيًا إلى EcoleArchive. بعض المتصفحات لا تسمح بإغلاق التبويب تلقائيًا.</p><a className="inline-flex items-center gap-1 text-primary underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4"/> إعداد معرّف Google Desktop</a></>:<p>سندعم Outlook في مرحلة لاحقة.</p>}<button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
         {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
