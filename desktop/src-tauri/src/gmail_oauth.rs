@@ -226,3 +226,93 @@ fn open_browser(link:&str)->Result<(),String>{
 }
 #[cfg(not(windows))]
 fn open_browser(_link:&str)->Result<(),String>{Err("Requires Windows".into())}
+
+#[derive(Serialize)]
+pub struct GmailItem {
+ id:String, thread_id:String, subject:String, sender:String, date:String,
+ snippet:String, unread:bool, has_attachments:bool,
+}
+fn gmail_http()->Result<reqwest::blocking::Client,String>{
+ reqwest::blocking::Client::builder()
+ .connect_timeout(Duration::from_secs(12)).timeout(Duration::from_secs(45))
+ .build().map_err(|e|network_error_kind(&e))
+}
+fn gmail_access_token(app:&tauri::AppHandle,http:&reqwest::blocking::Client)->Result<String,String>{
+ let account=load(app)?.ok_or("حساب Gmail غير مرتبط")?;
+ let secret=read_client_secret(app)?;
+ let mut form=vec![("client_id",account.client_id.as_str()),("refresh_token",account.refresh_token.as_str()),("grant_type","refresh_token")];
+ if let Some(ref value)=secret{form.push(("client_secret",value.as_str()));}
+ let response=http.post("https://oauth2.googleapis.com/token").form(&form).send()
+ .map_err(|e|format!("تعذر تجديد جلسة Gmail: {}",network_error_kind(&e)))?;
+ if !response.status().is_success(){
+  let status=response.status();
+  return Err(format!("تعذر تجديد تفويض Gmail (HTTP {status}). أعد ربط الحساب إذا انتهت الصلاحية"));
+ }
+ let json:serde_json::Value=response.json().map_err(|_|"استجابة تجديد Gmail غير صالحة")?;
+ json["access_token"].as_str().map(str::to_owned).ok_or("لم يرجع Google رمز وصول".into())
+}
+fn gmail_headers(json:&serde_json::Value,key:&str)->String{
+ json["payload"]["headers"].as_array().and_then(|arr|arr.iter().find(|h|h["name"].as_str().is_some_and(|s|s.eq_ignore_ascii_case(key))))
+ .and_then(|h|h["value"].as_str()).unwrap_or("").to_string()
+}
+fn gmail_has_attachment(part:&serde_json::Value)->bool{
+ if part["filename"].as_str().is_some_and(|s|!s.is_empty()){return true;}
+ part["parts"].as_array().is_some_and(|parts|parts.iter().any(gmail_has_attachment))
+}
+fn gmail_plain_text(part:&serde_json::Value)->Option<String>{
+ if part["mimeType"].as_str()==Some("text/plain"){
+  if let Some(encoded)=part["body"]["data"].as_str(){
+   if let Ok(bytes)=URL_SAFE_NO_PAD.decode(encoded){
+    if let Ok(text)=String::from_utf8(bytes){return Some(text)}
+   }
+  }
+ }
+ part["parts"].as_array().and_then(|arr|arr.iter().find_map(gmail_plain_text))
+}
+fn gmail_get_json(http:&reqwest::blocking::Client,token:&str,url:&str)->Result<serde_json::Value,String>{
+ let response=http.get(url).bearer_auth(token).send().map_err(|e|format!("تعذر جلب رسائل Gmail: {}",network_error_kind(&e)))?;
+ if !response.status().is_success(){
+  let status=response.status();
+  return Err(format!("رفض Gmail قراءة الرسائل (HTTP {status}). تحقق من صلاحيات Gmail API"));
+ }
+ response.json().map_err(|_|"رد Gmail غير صالح".into())
+}
+#[tauri::command]
+pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec<GmailItem>,String>{
+ tauri::async_runtime::spawn_blocking(move||{
+  let label=match folder.as_str(){"INBOX"|"SENT"|"STARRED"|"TRASH"=>folder.as_str(),_=>return Err("مجلد Gmail غير صالح".into())};
+  let http=gmail_http()?;
+  let token=gmail_access_token(&app,&http)?;
+  let url=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults=30");
+  let listing=gmail_get_json(&http,&token,&url)?;
+  let mut items=Vec::new();
+  if let Some(messages)=listing["messages"].as_array(){
+   for msg in messages{
+    let Some(id)=msg["id"].as_str()else{continue};
+    let safe_id=id.chars().all(|c|c.is_ascii_alphanumeric());
+    if !safe_id{continue}
+    let detail=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=metadata"))?;
+    let labels=detail["labelIds"].as_array();
+    items.push(GmailItem{
+     id:id.into(),thread_id:detail["threadId"].as_str().unwrap_or("").into(),
+     sender:gmail_headers(&detail,"From"),subject:gmail_headers(&detail,"Subject"),
+     date:gmail_headers(&detail,"Date"),
+     snippet:detail["snippet"].as_str().unwrap_or("").into(),
+     unread:labels.is_some_and(|l|l.iter().any(|v|v.as_str()==Some("UNREAD"))),
+     has_attachments:detail["payload"]["parts"].as_array().is_some_and(|a|a.iter().any(gmail_has_attachment))
+    });
+   }
+  }
+  Ok(items)
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+pub async fn gmail_read_message(app:tauri::AppHandle,id:String)->Result<String,String>{
+ if id.is_empty()||!id.chars().all(|c|c.is_ascii_alphanumeric()){return Err("معرّف الرسالة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;
+  let token=gmail_access_token(&app,&http)?;
+  let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
+  Ok(gmail_plain_text(&data["payload"]).unwrap_or_else(||data["snippet"].as_str().unwrap_or("لا يوجد نص عادي متاح لهذه الرسالة").into()))
+ }).await.map_err(|e|e.to_string())?
+}
