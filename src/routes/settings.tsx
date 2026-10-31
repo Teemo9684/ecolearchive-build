@@ -139,7 +139,7 @@ function SettingsPage() {
           <label className="min-w-0 flex-1 text-sm font-medium">Google Client ID
             <Input dir="ltr" className="mt-2" placeholder="xxxx.apps.googleusercontent.com" value={gmailClientId} onChange={e=>setGmailClientId(e.target.value)}/>
           </label>
-          <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-md border px-4 text-sm font-medium hover:bg-muted" title="فتح صفحة إنشاء Google OAuth Client ID">Google Cloud ↗</a>
+          <Button type="button" variant="outline" onClick={async()=>{try{if(isDesktop){await invokeDesktop("open_google_cloud_clients");}else{window.open("https://console.cloud.google.com/auth/clients","_blank","noopener,noreferrer");}}catch(e){toast.error("تعذر فتح Google Cloud: "+String(e));}}}>Google Cloud ↗</Button>
           <Button onClick={saveGmailClientId}>حفظ</Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">هذا المعرّف ليس كلمة سر. يُحفظ محليًا ولا يُرسل ضمن نسخ الأرشيف الاحتياطية.</p>
