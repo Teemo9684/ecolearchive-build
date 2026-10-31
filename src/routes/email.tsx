@@ -35,14 +35,13 @@ function EmailCenter() {
   const [provider,setProvider]=useState<"gmail"|"outlook">("gmail");
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
   const [connecting,setConnecting]=useState(false);
-  const [clientId,setClientId]=useState(()=>localStorage.getItem("ecolearchive-google-desktop-client-id")||"");
+  const clientId=(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   const connectGmail=async()=>{
     if(!isDesktopRuntime()){toast.error("تسجيل الدخول يعمل فقط في نسخة Windows");return;}
-    if(!clientId.endsWith(".apps.googleusercontent.com")){toast.error("أدخل Client ID لتطبيق Google Desktop");return;}
+    if(!clientId.endsWith(".apps.googleusercontent.com")){toast.error("ربط Google لم يُفعّل بعد من مطوّر البرنامج");return;}
     setConnecting(true);
     try {
-      localStorage.setItem("ecolearchive-google-desktop-client-id",clientId.trim());
       const email=await window.__TAURI_INTERNALS__!.invoke("gmail_connect",{clientId:clientId.trim()}) as string;
       setGmailEmail(email);setShowSetup(false);toast.success("تم ربط الحساب: "+email);
     }catch(e){toast.error("تعذر ربط Gmail: "+String(e));}
@@ -66,7 +65,7 @@ function EmailCenter() {
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
       <div className="text-sm"><strong>{gmailEmail?`متصل بحساب ${gmailEmail}`:"Gmail غير متصل بعد."}</strong> {gmailEmail?"تم منح الموافقة لتطبيق Windows. عرض الرسائل وإرسالها سيُفعّلان بعد توصيل واجهة Gmail API.":"اضغط «إضافة حساب»، ووافق عبر صفحة Google الرسمية. لن يطلب البرنامج كلمة مرورك."}</div>
     </div>
-    {showSetup&&<div className="panel space-y-3 p-4 text-sm"><h2 className="font-bold">ربط البريد الإلكتروني</h2><div className="flex gap-2"><button className={`rounded-lg px-4 py-2 border ${provider==="gmail"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("gmail")}>Gmail</button><button className={`rounded-lg px-4 py-2 border ${provider==="outlook"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("outlook")}>Outlook (لاحقًا)</button></div>{provider==="gmail"?<><p>أدخل معرّف OAuth من Google Cloud بنوع Desktop App مرة واحدة. هذا معرّف عام وليس كلمة سر.</p><label className="block">Google Client ID<input value={clientId} onChange={e=>setClientId(e.target.value)} dir="ltr" className="field-select mt-1 w-full" placeholder="xxxx.apps.googleusercontent.com"/></label><button disabled={connecting||!clientId.trim()} onClick={()=>void connectGmail()} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">{connecting?"بانتظار موافقة Google في المتصفح…":"المتابعة عبر Google"}</button><p className="text-xs text-muted-foreground">بعد الموافقة يعود الاتصال تلقائيًا إلى EcoleArchive. بعض المتصفحات لا تسمح بإغلاق التبويب تلقائيًا.</p><a className="inline-flex items-center gap-1 text-primary underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4"/> إعداد معرّف Google Desktop</a></>:<p>سندعم Outlook في مرحلة لاحقة.</p>}<button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
+    {showSetup&&<div className="panel space-y-3 p-5 text-sm"><h2 className="font-bold">تسجيل الدخول إلى Gmail</h2><p className="text-muted-foreground">اضغط الزر، واختر حسابك من Google، ثم وافق على الصلاحيات. يعود الاتصال إلى البرنامج تلقائيًا.</p><button disabled={connecting||!clientId} onClick={()=>void connectGmail()} className="rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">{connecting?"بانتظار الموافقة في المتصفح…":"تسجيل الدخول باستخدام Google"}</button>{!clientId&&<p role="alert" className="text-amber-700">اتصال Google يحتاج تفعيلًا واحدًا من مطوّر EcoleArchive قبل استعمال الزر. لن تحتاج إلى إدخال معرّف أو إعدادات.</p>}<button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
         {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
