@@ -31,6 +31,8 @@ function SettingsPage() {
   const current = useSettings();
   const [s, setS] = useState<Settings>(current);
   const [gmailClientId,setGmailClientId]=useState(()=>current.gmailClientId || localStorage.getItem("ecolearchive-google-desktop-client-id") || "");
+  const [gmailClientSecret,setGmailClientSecret]=useState("");
+  const [clientSecretSaved,setClientSecretSaved]=useState(false);
   const saveGmailClientId=async()=>{
     const value=gmailClientId.trim();
     if(value&&!/^[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(value)){toast.error("Google Client ID غير صحيح");return;}
@@ -38,6 +40,7 @@ function SettingsPage() {
     catch{toast.error("تعذر حفظ إعداد Gmail");}
   };
   useEffect(() => setS(current), [current]);
+  useEffect(()=>{if(isDesktop)void invokeDesktop<boolean>("gmail_has_client_secret").then(setClientSecretSaved).catch(()=>{});},[]);
   useEffect(()=>{if(current.gmailClientId)setGmailClientId(current.gmailClientId);},[current.gmailClientId]);
   const { data: years } = useCollection<AcademicYear>("academicYears");
   const { data: cats } = useCollection<ArchiveCategory>("archiveCategories");
@@ -141,6 +144,15 @@ function SettingsPage() {
           </label>
           <Button type="button" variant="outline" onClick={async()=>{try{if(isDesktop){await invokeDesktop("open_google_cloud_clients");}else{window.open("https://console.cloud.google.com/auth/clients","_blank","noopener,noreferrer");}}catch(e){toast.error("تعذر فتح Google Cloud: "+String(e));}}}>Google Cloud ↗</Button>
           <Button onClick={saveGmailClientId}>حفظ</Button>
+        </div>
+        {isDesktop&&<div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="min-w-0 flex-1 text-sm font-medium">Google Desktop Client Secret (اختياري، عند رفض Google تبادل الرمز)
+            <Input type="password" dir="ltr" className="mt-2" placeholder={clientSecretSaved?"محفوظ ومشفّر في Windows":"أدخل القيمة من Google Cloud"} value={gmailClientSecret} onChange={e=>setGmailClientSecret(e.target.value)} autoComplete="off"/>
+          </label>
+          <Button type="button" variant="outline" onClick={async()=>{if(!gmailClientSecret.trim()){toast.error("أدخل القيمة أولًا");return;}try{await (window.__TAURI_INTERNALS__ as {invoke:(name:string,args?:unknown)=>Promise<void>}).invoke("gmail_set_client_secret",{secret:gmailClientSecret});setGmailClientSecret("");setClientSecretSaved(true);toast.success("تم حفظ بيانات OAuth المشفّرة محليًا");}catch(e){toast.error(String(e));}}}>حفظ بيانات OAuth</Button>
+          {clientSecretSaved&&<Button type="button" variant="ghost" onClick={async()=>{try{await (window.__TAURI_INTERNALS__ as {invoke:(name:string,args?:unknown)=>Promise<void>}).invoke("gmail_set_client_secret",{secret:""});setClientSecretSaved(false);toast.success("تم حذف القيمة");}catch(e){toast.error(String(e));}}}>مسح</Button>}
+        </div>}
+        <div className="hidden">
         </div>
       </section>
 
