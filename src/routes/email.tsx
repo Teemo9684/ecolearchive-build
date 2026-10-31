@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/lib/db/desktop";
+import { useSettings } from "@/lib/db/hooks";
 import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,7 +34,8 @@ function EmailCenter() {
   const [accountMenu,setAccountMenu]=useState(false);
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
   const [connecting,setConnecting]=useState(false);
-  const readClientId=()=>{try{return (localStorage.getItem("ecolearchive-google-desktop-client-id")||"").trim();}catch{return "";}};
+  const settings=useSettings();
+  const readClientId=()=>settings.gmailClientId?.trim()||"";
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   const connectGmail=async()=>{
     if(!isDesktopRuntime()){toast.error("تسجيل الدخول يعمل فقط في نسخة Windows");return;}
