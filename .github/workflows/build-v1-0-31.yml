@@ -2,7 +2,7 @@ name: Build signed EcoleArchive v1.0.31 candidate
 on:
   push:
     branches:
-      - fix/v1-0-31-window-logo-google
+      - release/v1-0-31-gmail-fix
     paths:
       - 'src/**'
       - 'desktop/**'
@@ -112,7 +112,7 @@ jobs:
 
   publish-signed-update:
     needs: signed-windows-candidate
-    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/fix/v1-0-31-window-logo-google'
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-31-gmail-fix'
     runs-on: ubuntu-latest
     environment: windows-updates
     concurrency:
