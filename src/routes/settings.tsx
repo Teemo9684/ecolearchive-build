@@ -30,6 +30,13 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const current = useSettings();
   const [s, setS] = useState<Settings>(current);
+  const [gmailClientId,setGmailClientId]=useState(()=>{try{return localStorage.getItem("ecolearchive-google-desktop-client-id")||"";}catch{return "";}});
+  const saveGmailClientId=()=>{
+    const value=gmailClientId.trim();
+    if(value&&!/^[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(value)){toast.error("Google Client ID غير صحيح");return;}
+    try{if(value)localStorage.setItem("ecolearchive-google-desktop-client-id",value);else localStorage.removeItem("ecolearchive-google-desktop-client-id");toast.success("تم حفظ إعداد اتصال Gmail على هذا الجهاز");}
+    catch{toast.error("تعذر حفظ إعداد Gmail");}
+  };
   useEffect(() => setS(current), [current]);
   const { data: years } = useCollection<AcademicYear>("academicYears");
   const { data: cats } = useCollection<ArchiveCategory>("archiveCategories");
@@ -123,6 +130,18 @@ function SettingsPage() {
           <Field label="بادئة ترقيم البريد الصادر"><Input value={s.prefixOut} onChange={(e) => setS({ ...s, prefixOut: e.target.value })} /></Field>
         </div>
         <Button className="mt-4" onClick={saveInfo}>حفظ</Button>
+      </section>
+
+      <section className="panel p-4" dir="rtl">
+        <h2 className="mb-2 font-bold">إعداد اتصال Gmail</h2>
+        <p className="mb-3 text-sm text-muted-foreground">أدخل Google Client ID مرة واحدة على هذا الجهاز ثم اضغط حفظ. بعدها زر «إضافة حساب» في البريد يفتح Google مباشرة.</p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-0 flex-1 text-sm font-medium">Google Client ID
+            <Input dir="ltr" className="mt-2" placeholder="xxxx.apps.googleusercontent.com" value={gmailClientId} onChange={e=>setGmailClientId(e.target.value)}/>
+          </label>
+          <Button onClick={saveGmailClientId}>حفظ</Button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">هذا المعرّف ليس كلمة سر. يُحفظ محليًا ولا يُرسل ضمن نسخ الأرشيف الاحتياطية.</p>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
