@@ -5,6 +5,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD,Engine};
 use rand::RngCore;
 use sha2::{Sha256,Digest};
 use tauri::Manager;
+use std::error::Error as _;
 #[derive(Serialize,Deserialize)]
 struct Account { email:String, refresh_token:String, client_id:String }
 #[derive(Deserialize)]
@@ -61,6 +62,17 @@ pub fn gmail_set_client_secret(app:tauri::AppHandle,secret:String)->Result<(),St
 #[tauri::command]
 pub fn gmail_has_client_secret(app:tauri::AppHandle)->Result<bool,String>{
  Ok(read_client_secret(&app)?.is_some())
+}
+fn network_error_kind(error:&reqwest::Error)->String{
+ let phase=if error.is_timeout(){"انتهت مهلة الاتصال"}else if error.is_connect(){"فشل إنشاء اتصال TCP/TLS"}else if error.is_request(){"تعذر إرسال طلب HTTPS"}else if error.is_body(){"تعذر قراءة الاستجابة"}else{"خطأ اتصال HTTPS"};
+ // Avoid logging URLs, credentials, authorization codes or token responses.
+ let mut source=error.source();
+ let mut os_code=None;
+ while let Some(cause)=source{
+  if let Some(io)=cause.downcast_ref::<std::io::Error>() {os_code=io.raw_os_error();}
+  source=cause.source();
+ }
+ match os_code{Some(code)=>format!("{phase} (Windows error {code})"),None=>phase.into()}
 }
 fn exchange_form<'a>(client_id:&'a str,code:&'a str,verifier:&'a str,redirect:&'a str,secret:Option<&'a str>)->Vec<(&'static str,&'a str)>{
  let mut form=vec![("client_id",client_id),("code",code),("code_verifier",verifier),
@@ -163,10 +175,14 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
    Err(e)=>return Err(e.to_string())
   }
  };
- let http=reqwest::blocking::Client::builder().timeout(Duration::from_secs(25)).build().map_err(|e|e.to_string())?;
+ let http=reqwest::blocking::Client::builder()
+  .connect_timeout(Duration::from_secs(12))
+  .timeout(Duration::from_secs(45))
+  .tls_backend_native()
+  .build().map_err(|e|format!("تعذر إعداد اتصال Google HTTPS: {}",network_error_kind(&e)))?;
  let secret=read_client_secret(app)?;
  let form=exchange_form(client_id,code.as_str(),verifier.as_str(),redirect.as_str(),secret.as_deref());
- let response=http.post("https://oauth2.googleapis.com/token").form(&form).send().map_err(|e|e.to_string())?;
+ let response=http.post("https://oauth2.googleapis.com/token").form(&form).send().map_err(|e|format!("تعذر الاتصال بخادم Google OAuth أثناء تبادل الرمز: {}",network_error_kind(&e)))?;
  if !response.status().is_success(){
   let status=response.status();
   let body=response.text().unwrap_or_default();
@@ -178,7 +194,7 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
   return Err(format!("Google OAuth: {safe_code} (HTTP {status}). {safe_description}"));
  }
  let token:TokenResponse=response.json().map_err(|e|e.to_string())?;
- let profile=http.get("https://www.googleapis.com/oauth2/v3/userinfo").bearer_auth(&token.access_token).send().map_err(|e|e.to_string())?;
+ let profile=http.get("https://www.googleapis.com/oauth2/v3/userinfo").bearer_auth(&token.access_token).send().map_err(|e|format!("تعذر الاتصال بخادم Google userinfo: {}",network_error_kind(&e)))?;
  if !profile.status().is_success(){return Err("تعذر التحقق من عنوان البريد الإلكتروني".into())}
  let identity:serde_json::Value=profile.json().map_err(|e|e.to_string())?;
  let email=identity["email"].as_str().filter(|v|v.contains('@')).ok_or("لم يرجع Google عنوان البريد")?.to_string();
