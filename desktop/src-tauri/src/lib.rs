@@ -363,11 +363,163 @@ fn create_word_document(app: tauri::AppHandle, title: String, body: String, head
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn installed_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+
+/** User-owned Word templates live in Windows Documents; generated documents never overwrite them. */
+fn approved_templates_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let documents = app.path().document_dir().map_err(|e| e.to_string())?;
+    let folder = documents.join("EcoleArchive").join("قوالب الوثائق");
+    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    Ok(folder)
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserTemplateInfo { name: String, path: String }
+#[tauri::command]
+fn list_user_word_templates(app: tauri::AppHandle) -> Result<Vec<UserTemplateInfo>, String> {
+    let folder = approved_templates_directory(&app)?;
+    let mut out = Vec::new();
+    for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let valid = path.is_file()
+            && path.extension().and_then(|x| x.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("docx"))
+            && !path.file_name().and_then(|x| x.to_str()).unwrap_or("").starts_with("~$");
+        if valid {
+            out.push(UserTemplateInfo {
+                name: path.file_name().unwrap().to_string_lossy().to_string(),
+                path: path.to_string_lossy().to_string(),
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+#[tauri::command]
+fn read_user_word_template(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    use base64::Engine;
+    let basename = std::path::Path::new(&name);
+    if basename.components().count() != 1 || basename.file_name().and_then(|v|v.to_str()) != Some(name.as_str())
+        || !name.to_lowercase().ends_with(".docx") || name.starts_with("~$") {
+        return Err("Invalid template filename".into());
+    }
+    let root = approved_templates_directory(&app)?;
+    let path = root.join(name);
+    if !path.is_file() { return Err("Template not found".into()); }
+    let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
+    if metadata.len() > 20 * 1024 * 1024 { return Err("Template exceeds 20MB".into()); }
+    let raw = fs::read(path).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(raw))
+}
+#[tauri::command]
+fn user_word_template_folder(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(approved_templates_directory(&app)?.to_string_lossy().to_string())
+}
+
+
+/** Work on a generated copy in the temporary directory; the user's approved
+ * Documents template is never opened for editing or overwritten. */
+#[cfg(target_os="windows")]
+fn print_docx_with_windows_dialog(path: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Controls::Dialogs::{PrintDlgW, PRINTDLGW, DEVNAMES, CommDlgExtendedError};
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+    #[link(name = "kernel32")]
+    unsafe extern "system" { fn GlobalFree(memory: *mut std::ffi::c_void) -> *mut std::ffi::c_void; }
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    let mut dialog: PRINTDLGW = unsafe { std::mem::zeroed() };
+    dialog.lStructSize = std::mem::size_of::<PRINTDLGW>() as u32;
+    dialog.nCopies = 1;
+    dialog.Flags = 0x0000_0008 | 0x0008_0000; // PD_NOSELECTION | PD_DISABLEPRINTTOFILE
+    let accepted = unsafe { PrintDlgW(&mut dialog) } != 0;
+    if !accepted {
+        let code = unsafe { CommDlgExtendedError() };
+        if code != 0 { return Err(format!("تعذر فتح نافذة الطباعة (رمز {})", code)); }
+        return Ok(()); // user cancelled; no printing
+    }
+
+    let printer = unsafe {
+        if dialog.hDevNames.is_null() { None } else {
+            let memory = GlobalLock(dialog.hDevNames);
+            if memory.is_null() { None } else {
+                let names = &*(memory as *const DEVNAMES);
+                let wide = (memory as *const u16).add(names.wDeviceOffset as usize);
+                let len = (0..1024).position(|i| *wide.add(i) == 0);
+                let selected = len.map(|n| String::from_utf16_lossy(std::slice::from_raw_parts(wide, n)));
+                GlobalUnlock(dialog.hDevNames);
+                selected
+            }
+        }
+    };
+    unsafe {
+        if !dialog.hDevNames.is_null() { GlobalFree(dialog.hDevNames); }
+        if !dialog.hDevMode.is_null() { GlobalFree(dialog.hDevMode); }
+    }
+    let selected = printer.filter(|n| !n.trim().is_empty()).ok_or("لم نتمكن من تحديد الطابعة المختارة")?;
+    // Word's registered printto verb receives the printer explicitly. No PowerShell or visible console.
+    let pathname: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let action: Vec<u16> = "printto".encode_utf16().chain(std::iter::once(0)).collect();
+    let args: Vec<u16> = format!("\"{}\"", selected.replace('"', ""))
+        .encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(std::ptr::null_mut(), action.as_ptr(), pathname.as_ptr(),
+            args.as_ptr(), std::ptr::null(), SW_HIDE)
+    };
+    if (result as isize) <= 32 {
+        return Err(format!("تعذر إرسال الوثيقة للطابعة المختارة (Windows: {}). تحقق من دعم Word للطباعة المباشرة.", result as isize));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_generated_docx(base64: String, file_name: String, print: bool) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64).map_err(|_| "Invalid DOCX payload")?;
+    if bytes.len() < 16 || bytes.len() > 20 * 1024 * 1024
+        || !bytes.starts_with(b"PK") || !file_name.to_lowercase().ends_with(".docx") {
+        return Err("Invalid generated Word file".into());
+    }
+    let checksum = format!("{:x}", Sha256::digest(&bytes));
+    let dir = std::env::temp_dir().join("EcoleArchive").join("word-preview");
+    fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+    let path = dir.join(format!("document-{}.docx", &checksum[..24]));
+    fs::write(&path, bytes).map_err(|e|e.to_string())?;
+    #[cfg(target_os="windows")]
+    {
+        if print { return print_docx_with_windows_dialog(&path); }
+        // ShellExecuteW opens the registered DOCX handler directly with no PowerShell
+        // or visible console window. Word receives a generated temporary copy only.
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let path_w: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let verb: Vec<u16> = std::ffi::OsStr::new(if print { "print" } else { "open" })
+            .encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe {
+            ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), path_w.as_ptr(),
+                std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+        };
+        if (result as isize) <= 32 {
+            return Err(format!("تعذر فتح Word أو تشغيل الطباعة (Windows error {})", result as isize));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os="windows"))]
+    { let _ = (path, print); Err("This feature requires Windows".into()) }
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }

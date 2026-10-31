@@ -2,14 +2,16 @@ import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Home, Plus, Inbox, Send, FolderOpen, Users, Package, TrendingUp, BarChart3,
+  Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
   Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
 import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo-book.png";
+import bookLogo from "@/assets/logo-book.png";
+import packageInfo from "../../../package.json";
+import { isDesktopRuntime } from "@/lib/db/desktop";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
 const NAV: NavItem[][] = [
@@ -20,6 +22,8 @@ const NAV: NavItem[][] = [
     { to: "/mail/outgoing", label: "البريد الصادر", icon: Send },
     { to: "/archive", label: "الأرشيف الرقمي", icon: FolderOpen },
     { to: "/employees", label: "عمال المؤسسة", icon: Users },
+    { to: "/teachers", label: "العمال التربويون", icon: GraduationCap },
+    { to: "/students", label: "شؤون التلاميذ", icon: Baby },
     { to: "/inventory", label: "الجرد المدرسي", icon: Package },
     { to: "/admin-files", label: "التنقيط والمردودية", icon: TrendingUp },
     { to: "/reports", label: "التقارير والإحصائيات", icon: BarChart3 },
@@ -41,10 +45,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [q, setQ] = useState("");
+  const [installedVersion, setInstalledVersion] = useState(packageInfo.version);
   const fr = settings.locale === "fr";
   const home = path === "/";
 
   useEffect(() => { setDark(localStorage.getItem("ui-theme") === "dark"); }, []);
+  useEffect(() => { if (isDesktopRuntime()) void window.__TAURI_INTERNALS__!.invoke("installed_app_version").then((v: unknown) => { if (typeof v === "string") setInstalledVersion(v); }).catch(() => {}); }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
 
@@ -62,9 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <button className="absolute end-3 top-3 md:hidden" onClick={() => setOpen(false)} aria-label="إغلاق"><X className="h-5 w-5" /></button>
         <div className="flex flex-col items-center px-4 pb-4 pt-6 text-center">
-          <div className="sidebar-heritage-emblem relative grid h-24 w-24 place-items-center overflow-hidden rounded-full bg-sidebar-accent/60 ring-2 ring-gold/50 shadow-[0_0_40px_-8px] shadow-gold/60">
-            <img src={logo} alt="شعار المنظومة" width={96} height={96} className="relative z-0 h-16 w-16 object-contain" />
-          </div>
+          <img src={bookLogo} alt="شعار الكتاب" width={104} height={104} className="block h-24 w-24 object-contain drop-shadow-xl logo-3d-spin md:h-[6.5rem] md:w-[6.5rem]" />
           <div className="mt-2 font-display text-[16px] font-bold leading-snug">منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
           <div className="gold-rule header-gold-shimmer mt-4 w-3/4 opacity-70" />
         </div>
@@ -95,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ))}
           <div className="mx-5 mt-2 border-t border-sidebar-border pt-2">
-            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول التطبيق — نسخة محلية</div>
+            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول البرنامج — الإصدار {installedVersion}</div>
           </div>
         </nav>
       </aside>

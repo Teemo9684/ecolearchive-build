@@ -158,7 +158,7 @@
 @theme {
   --font-display: "El Messiri", "Cairo", system-ui, sans-serif;
   --animate-fade-up: fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  --animate-shine: shine 6s linear infinite;
+  --animate-shine: shine 12s linear infinite;
   @keyframes fade-up {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
@@ -303,6 +303,9 @@
   transform: translateX(-135%) rotate(-8deg);
   animation: sidebar-heritage-glint 9s ease-in-out infinite;
   mix-blend-mode: screen;
+  /* Restrict the sweep to the gilded outer ring, not the historical portrait. */
+  -webkit-mask-image: radial-gradient(circle, transparent 58%, #000 68%, #000 89%, transparent 99%);
+  mask-image: radial-gradient(circle, transparent 58%, #000 68%, #000 89%, transparent 99%);
 }
 .sidebar-heritage-emblem { isolation: isolate; }
 @keyframes sidebar-heritage-glint {
@@ -312,4 +315,35 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-heritage-emblem::after { animation: none; opacity: 0; }
+}
+
+/* Offline Lovable school emblem — soft gold ring and accessible shine */
+.emblem-ring { box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold, #c9a55d) 60%, transparent), 0 0 32px -7px color-mix(in oklab, var(--gold, #c9a55d) 55%, transparent); }
+.emblem-shine { animation: emblem-shine 7s ease-in-out infinite; }
+@keyframes emblem-shine { 0%,60% { transform: translateX(0) rotate(20deg); } 100% { transform: translateX(320px) rotate(20deg); } }
+@media (prefers-reduced-motion: reduce) { .emblem-shine { animation: none; opacity: 0; } }
+
+/* Approved school-logo sweep over gold pixels only, once every 4 seconds. */
+.logo-glow {
+  filter: drop-shadow(0 0 12px color-mix(in oklab, var(--color-gold, #d5ac61) 45%, transparent))
+          drop-shadow(0 6px 10px oklch(0 0 0 / 45%));
+}
+.logo-shine {
+  background: linear-gradient(100deg,
+    transparent 43%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 40%, transparent) 47.5%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 90%, white) 50%,
+    color-mix(in oklab, var(--color-gold, #d5ac61) 40%, transparent) 52.5%,
+    transparent 57%);
+  background-size: 200% 100%;
+  animation: var(--animate-shine);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes lovable-school-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-shine { animation: none; opacity: 0; }
 }

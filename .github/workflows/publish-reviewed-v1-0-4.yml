@@ -1,0 +1,35 @@
+name: Publish reviewed EcoleArchive v1.0.4
+on:
+  push:
+    branches: [feature/official-v1-0-0-candidate]
+    paths:
+      - '.release-requests/publish-v1.0.4.txt'
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.repository == 'Teemo9684/ecolearchive-build'
+    runs-on: ubuntu-latest
+    environment: windows-updates
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed draft release and publish
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .release-requests/publish-v1.0.4.txt | tr -d '\r\n')" = "PUBLISH_V1.0.4_AFTER_SIGNED_BUILD"
+          test "$(node -p "require('./package.json').version")" = "1.0.4"
+          test "$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")" = "1.0.4"
+          test -n "$GH_TOKEN"
+          gh release view v1.0.4 -R Teemo9684/ecolearchive-updates --json isDraft -q '.isDraft' | grep -qx true
+          mkdir -p release-verify
+          gh release download v1.0.4 -R Teemo9684/ecolearchive-updates -D release-verify
+          test -s release-verify/EcoleArchive-1.0.4-x64-setup.exe
+          test -s release-verify/EcoleArchive-1.0.4-x64-setup.exe.sig
+          test -s release-verify/latest.json
+          node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync("release-verify/latest.json")); const sig=fs.readFileSync("release-verify/EcoleArchive-1.0.4-x64-setup.exe.sig","utf8").trim(); if(m.version!=="1.0.4"||m.platforms?.["windows-x86_64"]?.signature!==sig||!m.platforms?.["windows-x86_64"]?.url?.includes("/v1.0.4/EcoleArchive-1.0.4-x64-setup.exe"))process.exit(2);'
+          test "$(wc -c < release-verify/EcoleArchive-1.0.4-x64-setup.exe)" -gt 1000000
+          gh release edit v1.0.4 -R Teemo9684/ecolearchive-updates --draft=false
+          gh release view v1.0.4 -R Teemo9684/ecolearchive-updates --json isDraft -q '.isDraft' | grep -qx false
