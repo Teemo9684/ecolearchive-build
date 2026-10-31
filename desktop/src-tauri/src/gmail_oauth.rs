@@ -35,6 +35,55 @@ fn load(app:&tauri::AppHandle)->Result<Option<Account>,String>{
  let json=protect(&bytes,true)?;
  serde_json::from_slice(&json).map(Some).map_err(|e|e.to_string())
 }
+// Desktop OAuth client credentials are public-client credentials, but keep the
+// optional client secret off UI storage, protected by Windows DPAPI.
+fn client_secret_path(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>{
+ let dir=app.path().app_data_dir().map_err(|e|e.to_string())?;
+ fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+ Ok(dir.join("gmail-oauth-client.dpapi"))
+}
+fn read_client_secret(app:&tauri::AppHandle)->Result<Option<String>,String>{
+ let path=client_secret_path(app)?;
+ if !path.exists(){return Ok(None)}
+ let plaintext=protect(&fs::read(path).map_err(|e|e.to_string())?,true)?;
+ let value=String::from_utf8(plaintext).map_err(|e|e.to_string())?;
+ Ok(Some(value))
+}
+#[tauri::command]
+pub fn gmail_set_client_secret(app:tauri::AppHandle,secret:String)->Result<(),String>{
+ let value=secret.trim();
+ if value.len()>512 || value.chars().any(char::is_control){return Err("قيمة Google OAuth غير صالحة".into())}
+ let path=client_secret_path(&app)?;
+ if value.is_empty(){if path.exists(){fs::remove_file(path).map_err(|e|e.to_string())?;}return Ok(())}
+ let encrypted=protect(value.as_bytes(),false)?;
+ fs::write(path,encrypted).map_err(|e|e.to_string())
+}
+#[tauri::command]
+pub fn gmail_has_client_secret(app:tauri::AppHandle)->Result<bool,String>{
+ Ok(read_client_secret(&app)?.is_some())
+}
+fn exchange_form<'a>(client_id:&'a str,code:&'a str,verifier:&'a str,redirect:&'a str,secret:Option<&'a str>)->Vec<(&'static str,&'a str)>{
+ let mut form=vec![("client_id",client_id),("code",code),("code_verifier",verifier),
+ ("redirect_uri",redirect),("grant_type","authorization_code")];
+ if let Some(value)=secret.filter(|s|!s.is_empty()){form.push(("client_secret",value));}
+ form
+}
+#[cfg(test)]
+mod oauth_tests {
+ use super::*;
+ #[test]
+ fn exchange_uses_matching_pkce_and_redirect(){
+  let form=exchange_form("desktop.apps.googleusercontent.com","code","pkce-verifier","http://127.0.0.1:49200/",None);
+  assert_eq!(form.iter().find(|x|x.0=="code_verifier").unwrap().1,"pkce-verifier");
+  assert_eq!(form.iter().find(|x|x.0=="redirect_uri").unwrap().1,"http://127.0.0.1:49200/");
+  assert!(!form.iter().any(|x|x.0=="client_secret"));
+ }
+ #[test]
+ fn exchange_can_send_desktop_client_secret_when_configured(){
+  let form=exchange_form("desktop.apps.googleusercontent.com","code","verifier","http://127.0.0.1:49200/",Some("desktop-secret"));
+  assert_eq!(form.iter().find(|x|x.0=="client_secret").unwrap().1,"desktop-secret");
+ }
+}
 #[tauri::command]
 pub fn gmail_account_status(app:tauri::AppHandle)->Result<Option<String>,String>{
  Ok(load(&app)?.map(|a|a.email))
@@ -99,10 +148,9 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
   }
  };
  let http=reqwest::blocking::Client::builder().timeout(Duration::from_secs(25)).build().map_err(|e|e.to_string())?;
- let response=http.post("https://oauth2.googleapis.com/token").form(&[
-  ("client_id",client_id),("code",code.as_str()),("code_verifier",verifier.as_str()),
-  ("redirect_uri",redirect.as_str()),("grant_type","authorization_code")
- ]).send().map_err(|e|e.to_string())?;
+ let secret=read_client_secret(app)?;
+ let form=exchange_form(client_id,code.as_str(),verifier.as_str(),redirect.as_str(),secret.as_deref());
+ let response=http.post("https://oauth2.googleapis.com/token").form(&form).send().map_err(|e|e.to_string())?;
  if !response.status().is_success(){
   let status=response.status();
   let body=response.text().unwrap_or_default();
