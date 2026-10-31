@@ -1,0 +1,48 @@
+name: Gmail live inbox Windows verification (no release)
+on:
+  push:
+    branches:
+      - feature/gmail-live-inbox
+    paths:
+      - 'desktop/src-tauri/src/**'
+      - 'desktop/src-tauri/Cargo.toml'
+      - 'src/routes/email.tsx'
+      - '.github/workflows/gmail-live-inbox-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-oauth-check:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Restore logo asset for native Windows resource
+        shell: pwsh
+        run: |
+          $data = (Get-Content -Raw 'src/assets/logo-book.png.b64').Trim()
+          [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'src/assets/logo-book.png'),[Convert]::FromBase64String($data))
+      - name: Generate Windows resource icons
+        shell: pwsh
+        run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Prepare Tauri frontend directory for Rust-only verification
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop-web-dist | Out-Null
+          Set-Content -Path desktop-web-dist/index.html -Value '<!doctype html><html><body>OAuth test</body></html>'
+      - name: Verify native Google OAuth client compiles on Windows
+        shell: pwsh
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Run OAuth unit tests
+        shell: pwsh
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib oauth_tests
