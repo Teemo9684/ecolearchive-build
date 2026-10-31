@@ -355,3 +355,30 @@
 @media (prefers-reduced-motion: reduce) {
   .logo-shine { animation: none; opacity: 0; }
 }
+
+/* Copper-gold metallic book: keep approved artwork and the existing Y spin. */
+.sidebar-book-metal { isolation: isolate; }
+.sidebar-book-metal-art {
+  filter: sepia(.66) saturate(1.85) hue-rotate(-13deg) brightness(1.04) contrast(1.19)
+          drop-shadow(0 1px 1px rgba(255,223,152,.55))
+          drop-shadow(0 7px 11px rgba(22,9,2,.65));
+}
+.sidebar-book-metal-glint {
+  background: linear-gradient(113deg, transparent 37%, rgba(255,231,162,.08) 43%,
+    rgba(255,236,174,.32) 49%, rgba(252,193,98,.12) 54%, transparent 62%);
+  -webkit-mask-image: url("../src/assets/logo-book.png");
+  mask-image: url("../src/assets/logo-book.png");
+  -webkit-mask-size: contain; mask-size: contain;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  mix-blend-mode: screen;
+  animation: sidebar-book-light 4s ease-in-out infinite;
+}
+@keyframes sidebar-book-light {
+  0%, 16% { opacity: 0; transform: translateX(-12px); }
+  38% { opacity: .8; transform: translateX(6px); }
+  65%, 100% { opacity: 0; transform: translateX(12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-book-metal-glint { animation: none; opacity: 0; }
+}
