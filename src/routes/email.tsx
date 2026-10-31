@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle } from "lucide-react";
+import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 /** The Gmail UI is intentionally disconnected until desktop OAuth is configured.
@@ -30,19 +30,22 @@ function EmailCenter() {
     setCompose(false);
   };
   const [showSetup,setShowSetup]=useState(false);
+  const [accountMenu,setAccountMenu]=useState(false);
+  const [provider,setProvider]=useState<"gmail"|"outlook">("gmail");
   return <section className="space-y-5" dir="rtl">
     <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold"><Mail className="h-7 w-7"/> البريد الإلكتروني</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gmail المدرسي</p>
       </div>
-      <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold" onClick={()=>setShowSetup(v=>!v)}>ربط حساب Gmail</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
+      <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold flex items-center gap-2" onClick={()=>setAccountMenu(v=>!v)}><ChevronDown className="h-4 w-4"/> إدارة الحسابات</button><button className="rounded-xl border px-4 py-3 font-semibold" onClick={()=>setShowSetup(v=>!v)}>إضافة حساب</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
     </div>
+    {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">لا يوجد حساب متصل حاليًا. لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setShowSetup(true);setAccountMenu(false);}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 opacity-50" title="يتفعّل تسجيل الخروج بعد الاتصال الحقيقي"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
     <div className="panel flex items-start gap-2 border-amber-300 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
       <div className="text-sm"><strong>Gmail غير متصل بعد.</strong> يتم الربط عبر تسجيل الدخول الرسمي من Google على كمبيوتر المدرسة. لا تدخل كلمة مرور الحساب هنا؛ الإرسال والاستقبال غير متاحين حتى اكتمال الإعداد.</div>
     </div>
-    {showSetup&&<div className="panel space-y-2 p-4 text-sm"><h2 className="font-bold">إعداد ربط Gmail الآمن</h2><p>يستلزم الربط إعداد Google OAuth 2.0 من نوع Desktop App، وإنشاء Client ID خاص بالمنظومة. تسجيل الدخول المباشر غير متاح حتى يكتمل اتصال Google API؛ هذا الزر لا يطلب كلمة السر ولا يرسل بيانات الحساب.</p><a className="text-primary underline" href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer">إعداد Gmail API عبر Google Cloud</a></div>}
+    {showSetup&&<div className="panel space-y-3 p-4 text-sm"><h2 className="font-bold">إضافة حساب بريد إلكتروني</h2><p className="text-muted-foreground">اختر مزود البريد. لن يطلب منك EcoleArchive كلمة السر؛ الربط الآمن يحتاج تهيئة OAuth في تطبيق Windows أولًا.</p><div className="flex gap-2"><button className={`rounded-lg px-4 py-2 border ${provider==="gmail"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("gmail")}>Gmail</button><button className={`rounded-lg px-4 py-2 border ${provider==="outlook"?"border-primary font-bold":"border-border"}`} onClick={()=>setProvider("outlook")}>Outlook</button></div><div className="rounded-lg border bg-muted/40 p-3"><strong>حالة الربط: غير مهيّأ</strong><p className="mt-1 text-muted-foreground">لا تتوفر في هذه النسخة خدمة استقبال رمز التفويض وحفظ جلسة الحساب بشكل آمن. لن نفتح تسجيل دخول وهميًا أو نخزن رمزًا في localStorage.</p><a className="mt-2 inline-flex items-center gap-1 font-semibold text-primary underline" href={provider==="gmail"?"https://console.cloud.google.com/apis/credentials":"https://entra.microsoft.com/"} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4"/> إعداد {provider==="gmail"?"Google OAuth Desktop":"Microsoft Entra App Registration"}</a></div><button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
         {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
