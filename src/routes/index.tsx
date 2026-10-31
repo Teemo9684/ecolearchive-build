@@ -41,6 +41,8 @@ function Dashboard() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<string | null>(null);
+  const [updateBusy,setUpdateBusy]=useState(false);
+  const [downloadProgress,setDownloadProgress]=useState<{downloaded:number;total:number|null;phase:string}|null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const docs = useCollection<DocumentRecord>("documents");
   const corr = useCollection<Correspondence>("correspondences");
@@ -57,8 +59,11 @@ function Dashboard() {
         .catch(() => { /* offline or updater unavailable: preserve existing alerts */ });
     };
     check();
-    const timer = window.setInterval(check, 30 * 60 * 1000);
-    return () => { active = false; window.clearInterval(timer); };
+    const timer = window.setInterval(check, 60 * 1000);
+    const onFocus=()=>check();
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onFocus);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onFocus); };
   }, []);
   useEffect(() => {
     if (!infoOpen && !alertsOpen) return;
@@ -68,6 +73,16 @@ function Dashboard() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [infoOpen, alertsOpen]);
+
+  const installFromBell=async()=>{
+    if(!availableUpdate||updateBusy||!isDesktopRuntime())return;
+    if(!window.confirm(`تثبيت التحديث ${availableUpdate}؟ احفظ عملك أولًا، وسيُعاد تشغيل البرنامج.`))return;
+    setUpdateBusy(true);setDownloadProgress({downloaded:0,total:null,phase:"checking"});
+    const timer=window.setInterval(()=>{window.__TAURI_INTERNALS__!.invoke("get_update_download_progress").then(v=>setDownloadProgress(v as {downloaded:number;total:number|null;phase:string})).catch(()=>{});},400);
+    try{await window.__TAURI_INTERNALS__!.invoke("install_desktop_update");}
+    catch(e){window.alert("تعذر تثبيت التحديث: "+String(e));setUpdateBusy(false);}
+    finally{window.clearInterval(timer);}
+  };
 
   const liveDocs = docs.data.filter((d) => !d.deletedAt);
   const liveCorr = corr.data.filter((c) => !c.deletedAt);
@@ -144,8 +159,8 @@ function Dashboard() {
               <div className="space-y-3">
                 {availableUpdate && <div className="rounded-xl border border-gold/50 bg-muted p-4">
                   <div className="font-bold">يتوفر تحديث جديد: {availableUpdate}</div>
-                  <p className="mt-1 text-sm">يمكنك مراجعة التحديث وتثبيته من الإعدادات.</p>
-                  <button onClick={() => { setAlertsOpen(false); navigate({ to: "/settings" }); }} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground">فتح إعدادات التحديث</button>
+                  <p className="mt-1 text-sm">تستطيع تثبيت التحديث مباشرة من مركز التنبيهات.</p>
+                  <button disabled={updateBusy} onClick={()=>void installFromBell()} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60">{updateBusy?"جارٍ تثبيت التحديث…":"تثبيت التحديث الآن"}</button>{updateBusy&&downloadProgress&&<p className="mt-2 text-xs" role="status">التنزيل: {downloadProgress.total?Math.round(100*downloadProgress.downloaded/downloadProgress.total)+"%":"جارٍ التحضير"} — {downloadProgress.phase}</p>}
                 </div>}
                 {pendingIn > 0 && <div className="rounded-xl border p-4">
                   <div className="font-bold">مراسلات واردة تنتظر المعالجة: {pendingIn}</div>
@@ -161,7 +176,6 @@ function Dashboard() {
       <section className="relative overflow-hidden bg-sidebar">
         <img src={hero} alt="" width={1920} height={640} className="absolute inset-0 h-full w-full scale-105 object-cover" style={{ transform: "scaleX(-1)" }} />
         <div className="absolute inset-0 bg-gradient-to-l from-sidebar/40 via-sidebar/75 to-sidebar/30" />
-        <div className="ornament absolute inset-0 opacity-60" />
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-sidebar/80 to-transparent" />
         <div className="relative flex flex-col gap-5 px-5 pb-11 pt-5 md:px-8 lg:flex-row lg:items-center">
           <div className="hidden shrink-0 animate-fade-up lg:block">
