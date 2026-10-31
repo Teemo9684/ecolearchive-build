@@ -75,7 +75,10 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
   if started.elapsed()>Duration::from_secs(180){return Err("انتهت مهلة تسجيل الدخول. حاول من جديد.".into())}
   match listener.accept(){
    Ok((mut stream,_))=>{
-    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    // TcpListener is nonblocking on Windows; accepted sockets may inherit that mode.
+    // Switch the callback connection to blocking I/O before reading the HTTP request.
+    stream.set_nonblocking(false).map_err(|e|e.to_string())?;
+    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e|e.to_string())?;
     let mut data=[0u8;8192];let n=stream.read(&mut data).map_err(|e|e.to_string())?;
     let first=String::from_utf8_lossy(&data[..n]).lines().next().unwrap_or("").to_owned();
     let target=first.split_whitespace().nth(1).ok_or("Invalid OAuth callback")?;
