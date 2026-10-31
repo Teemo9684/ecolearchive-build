@@ -68,9 +68,29 @@ fn exchange_form<'a>(client_id:&'a str,code:&'a str,verifier:&'a str,redirect:&'
  if let Some(value)=secret.filter(|s|!s.is_empty()){form.push(("client_secret",value));}
  form
 }
+fn oauth_callback(target:&str,port:u16,expected_state:&str)->Result<Option<String>,String>{
+ let url=url::Url::parse(&format!("http://127.0.0.1:{port}{target}")).map_err(|_|"عنوان استجابة Google غير صالح".to_string())?;
+ if url.path()!="/" || url.host_str()!=Some("127.0.0.1") || url.port()!=Some(port){return Err("مسار استجابة Google غير صحيح".into())}
+ let args:std::collections::HashMap<_,_>=url.query_pairs().map(|(a,b)|(a.to_string(),b.to_string())).collect();
+ if args.get("state").map(String::as_str)!=Some(expected_state){return Err("فشل التحقق من رمز الأمان OAuth state".into())}
+ if let Some(e)=args.get("error"){return Err(format!("Google رفض التفويض: {}",e.chars().take(80).collect::<String>()))}
+ Ok(args.get("code").cloned())
+}
 #[cfg(test)]
 mod oauth_tests {
  use super::*;
+ #[test]
+ fn callback_decodes_code_and_checks_state(){
+  assert_eq!(oauth_callback("/?code=a%2Fb%2Bc&state=abc",45200,"abc").unwrap(),Some("a/b+c".into()));
+  assert!(oauth_callback("/?code=secret&state=wrong",45200,"abc").is_err());
+  assert!(oauth_callback("/other?code=secret&state=abc",45200,"abc").is_err());
+  assert!(oauth_callback("/?error=access_denied&state=abc",45200,"abc").is_err());
+ }
+ #[test]
+ fn pkce_challenge_matches_rfc7636_vector(){
+  let verifier="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+  assert_eq!(URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())),"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+ }
  #[test]
  fn exchange_uses_matching_pkce_and_redirect(){
   let form=exchange_form("desktop.apps.googleusercontent.com","code","pkce-verifier","http://127.0.0.1:49200/",None);
@@ -131,17 +151,13 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
     let mut data=[0u8;8192];let n=stream.read(&mut data).map_err(|e|e.to_string())?;
     let first=String::from_utf8_lossy(&data[..n]).lines().next().unwrap_or("").to_owned();
     let target=first.split_whitespace().nth(1).ok_or("Invalid OAuth callback")?;
-    let query=url::Url::parse(&format!("http://127.0.0.1:{port}{target}")).map_err(|e|e.to_string())?;
-    let args:std::collections::HashMap<_,_>=query.query_pairs().map(|(a,b)|(a.to_string(),b.to_string())).collect();
-    let valid=args.get("state").map(String::as_str)==Some(state.as_str()) && query.path()=="/";
-    let success=valid && args.contains_key("code");
+    let parsed=oauth_callback(target,port,&state);
+    let success=matches!(&parsed,Ok(Some(_)));
     let message=if success{"تمت موافقة Google. ارجع إلى EcoleArchive للتأكد من إتمام الاتصال."}else{"لم يكتمل الربط. ارجع إلى EcoleArchive وأعد المحاولة."};
     let html=format!("<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'><title>EcoleArchive</title><body style='font-family:sans-serif;text-align:center;padding:50px'><h2>{message}</h2><script>window.close()</script></body></html>");
     let response=format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",html.len(),html);
     stream.write_all(response.as_bytes()).ok();
-    if !valid{return Err("فشل التحقق من رمز الأمان OAuth state".into())}
-    if let Some(err)=args.get("error"){return Err(format!("Google رفض التفويض: {err}"))}
-    break args.get("code").cloned().ok_or("لم يتم استلام رمز Google")?;
+    break parsed?.ok_or("لم يتم استلام رمز Google")?;
    },
    Err(e) if e.kind()==std::io::ErrorKind::WouldBlock=>std::thread::sleep(Duration::from_millis(120)),
    Err(e)=>return Err(e.to_string())
