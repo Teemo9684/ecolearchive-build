@@ -158,11 +158,21 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
    Ok((mut stream,_))=>{
     // TcpListener is nonblocking on Windows; accepted sockets may inherit that mode.
     // Switch the callback connection to blocking I/O before reading the HTTP request.
-    stream.set_nonblocking(false).map_err(|e|e.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e|e.to_string())?;
-    let mut data=[0u8;8192];let n=stream.read(&mut data).map_err(|e|e.to_string())?;
+    // Browsers and security software can open speculative local sockets and close
+    // them without sending a callback. Never let those sockets abort OAuth.
+    if stream.set_nonblocking(false).is_err(){continue;}
+    if stream.set_read_timeout(Some(Duration::from_secs(8))).is_err(){continue;}
+    let mut data=[0u8;8192];
+    let n=match stream.read(&mut data){
+     Ok(0)=>continue,
+     Ok(n)=>n,
+     Err(e) if matches!(e.kind(),std::io::ErrorKind::TimedOut|std::io::ErrorKind::WouldBlock|std::io::ErrorKind::ConnectionReset|std::io::ErrorKind::ConnectionAborted)=>continue,
+     Err(_)=>continue
+    };
     let first=String::from_utf8_lossy(&data[..n]).lines().next().unwrap_or("").to_owned();
-    let target=first.split_whitespace().nth(1).ok_or("Invalid OAuth callback")?;
+    let Some(target)=first.strip_prefix("GET ").and_then(|v|v.split_whitespace().next())else{continue;};
+    // Ignore unrelated requests such as favicon fetches rather than ending login.
+    if !target.starts_with("/?"){continue;}
     let parsed=oauth_callback(target,port,&state);
     let success=matches!(&parsed,Ok(Some(_)));
     let message=if success{"تمت موافقة Google. ارجع إلى EcoleArchive للتأكد من إتمام الاتصال."}else{"لم يكتمل الربط. ارجع إلى EcoleArchive وأعد المحاولة."};
