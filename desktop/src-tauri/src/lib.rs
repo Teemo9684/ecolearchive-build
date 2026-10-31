@@ -589,7 +589,7 @@ fn word_pdf_worker_convert(docx:&std::path::Path,pdf:&std::path::Path)->Result<(
     let mutex=WORD_PDF_WORKER.get_or_init(||std::sync::Mutex::new(None));
     let mut guard=mutex.lock().map_err(|_|"Word worker lock poisoned")?;
     let encode=|path:&std::path::Path|base64::engine::general_purpose::STANDARD.encode(path.to_string_lossy().as_bytes());
-    let request=format!("{}\\t{}\\n",encode(docx),encode(pdf));
+    let request=format!("{}\t{}\n",encode(docx),encode(pdf));
     for retry in 0..2 {
         if guard.is_none(){*guard=Some(new_word_pdf_worker()?);}
         let worker=guard.as_mut().ok_or("Worker unavailable")?;
