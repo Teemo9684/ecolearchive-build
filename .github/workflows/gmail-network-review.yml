@@ -16,6 +16,18 @@ jobs:
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Restore logo asset for native Windows resource
+        shell: pwsh
+        run: |
+          $data = (Get-Content -Raw 'src/assets/logo-book.png.b64').Trim()
+          [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'src/assets/logo-book.png'),[Convert]::FromBase64String($data))
+      - name: Generate Windows resource icons
+        shell: pwsh
+        run: bunx @tauri-apps/cli@2 icon src/assets/logo-book.png --output desktop/src-tauri/icons
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
