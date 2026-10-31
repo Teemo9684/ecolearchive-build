@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { NativeDocxPreview } from "./NativeDocxPreview";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
 import { readApprovedTemplate } from "@/lib/approved-templates";
@@ -34,15 +35,9 @@ export function NativeWordComposer() {
   const [fields,setFields]=useState<string[]>([]);
   const [values,setValues]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
-  const [preview,setPreview]=useState<string|null>(null);
+  const [preview,setPreview]=useState<File|null>(null);
   const [printReview,setPrintReview]=useState(false);
-  const [printLoading,setPrintLoading]=useState(false);
-  const preciseSequence=useRef(0);
-  const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
-  // Closing the preview should never invalidate its cached PDF URL.
-  useEffect(() => () => { if (previewCache.current) URL.revokeObjectURL(previewCache.current.url); }, []);
-  const previewPending = useRef<{key:string;promise:Promise<string>}|null>(null);
   const [loading,setLoading]=useState(true);
   const [recipients,setRecipients]=useState<string[]>(()=>{
     try{return JSON.parse(localStorage.getItem("ecolearchive-recipients")||"[]") as string[];}catch{return [];}
@@ -112,29 +107,6 @@ export function NativeWordComposer() {
     }
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
-  const previewKey=JSON.stringify([selected,values]);
-  const latestPreviewKey=useRef(previewKey);
-  latestPreviewKey.current=previewKey;
-  // Share a conversion between proactive preparation and the Preview button.
-  // The original DOCX is always used by Word for faithful page layout.
-  const getPreviewUrl=async(key:string):Promise<string>=>{
-    if(previewCache.current?.key===key)return previewCache.current.url;
-    if(previewPending.current?.key===key)return previewPending.current.promise;
-    const job=(async()=>{
-      const output=await ready();
-      const encoded=encode64(new Uint8Array(await bytesOf(output)));
-      const pdf=await window.__TAURI_INTERNALS__!.invoke("preview_generated_docx_pdf",{base64:encoded}) as string;
-      const url=URL.createObjectURL(new Blob([decode64(pdf)],{type:"application/pdf"}));
-      if(latestPreviewKey.current!==key){URL.revokeObjectURL(url);return "";}
-      const old=previewCache.current;
-      previewCache.current={key,url};
-      // Do not revoke an in-use PDF until its viewer has been closed.
-      if(old && old.url!==preview && old.url!==url)URL.revokeObjectURL(old.url);
-      return url;
-    })();
-    previewPending.current={key,promise:job};
-    try{return await job;}finally{if(previewPending.current?.promise===job)previewPending.current=null;}
-  };
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
       const value=values[field]?.trim();
@@ -152,9 +124,8 @@ export function NativeWordComposer() {
       setPreparingPreview(true);
       setBusy(true);
       try{
-        const url=await getPreviewUrl(previewKey);
-        if(!url)throw Error("تعذر تجهيز المعاينة الدقيقة");
-        setPreview(url);
+        const file=await ready();
+        setPreview(file);
         setPrintReview(true);
         preserveDirectoryEntries();
       }catch(e){toast.error(String(e instanceof Error?e.message:e));}
@@ -164,11 +135,8 @@ export function NativeWordComposer() {
     setBusy(true);
     if(mode==="preview")setPreparingPreview(true);
     try{
-      const key=previewKey;
       if(mode==="preview"){
-        const sequence=++preciseSequence.current;
-        const url=await getPreviewUrl(key);
-        if(sequence===preciseSequence.current&&url)setPreview(url);
+        setPreview(await ready());
         preserveDirectoryEntries();
         return;
       }
@@ -191,22 +159,14 @@ export function NativeWordComposer() {
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
     finally{setBusy(false);setPreparingPreview(false);}
   };
-  const confirmNativePrint=async()=>{
-    if(printLoading||busy)return;
-    setPrintLoading(true);
-    try{
-      const url=await getPreviewUrl(previewKey);
-      if(!url)throw Error("تعذر تجهيز ملف PDF");
-      const pdfBytes=new Uint8Array(await (await fetch(url)).arrayBuffer());
-      if(!isDesktopRuntime())throw Error("الطباعة تتطلب نسخة Windows");
-      await window.__TAURI_INTERNALS__!.invoke("open_generated_pdf",{base64:encode64(pdfBytes)});
-      setPrintReview(false);
-      preserveDirectoryEntries();
-    }catch(e){toast.error(String(e instanceof Error?e.message:e));}
-    finally{setPrintLoading(false);}
+  const confirmNativePrint=()=>{
+    const frame=document.getElementById("ecolearchive-print-frame") as HTMLIFrameElement|null;
+    if(!frame?.contentWindow){toast.error("لم تجهز المعاينة بعد");return;}
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
   };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
-    {printReview&&<div role="dialog" aria-modal="true" aria-label="الطباعة" className="fixed inset-0 z-[90] bg-black/60 p-3 flex items-center justify-center"><div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-xl"><div className="flex items-center justify-between gap-3 border-b p-4"><strong>معاينة الطباعة الدقيقة — {selected.replace(/\\.docx$/i,"")}</strong><button className="rounded-md border px-3 py-2" disabled={printLoading} onClick={()=>setPrintReview(false)}>إغلاق</button></div><div className="min-h-0 flex-1 bg-muted p-2">{preview&&preview!=="local"&&preview!=="certificate-a4"?<iframe className="h-full w-full bg-white" title="ملف PDF النهائي" src={preview}/>:<p className="p-6 text-center">اضغط «تجهيز المعاينة» لعرض ملف PDF الأصلي قبل الطباعة.</p>}</div><div className="flex flex-wrap justify-between gap-2 border-t p-3"><button className="rounded-md border px-4 py-2" disabled={printLoading} onClick={()=>void action("preview")}>تجهيز المعاينة الدقيقة</button><button className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50" disabled={printLoading||busy} onClick={()=>void confirmNativePrint()}>{printLoading?"جارٍ تجهيز PDF…":"فتح PDF النهائي للطباعة"}</button></div></div></div>}
+    {printReview&&preview&&<div role="dialog" aria-modal="true" aria-label="مراجعة الطباعة" className="fixed inset-0 z-[90] bg-black/60 p-3 flex items-center justify-center"><div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-xl"><div className="flex items-center justify-between gap-3 border-b p-4"><strong>مراجعة DOCX قبل الطباعة — {selected.replace(/\\.docx$/i,"")}</strong><button className="rounded-md border px-3 py-2" onClick={()=>setPrintReview(false)}>إغلاق</button></div><p className="px-4 py-2 text-xs text-amber-700">العرض والطباعة بالمحرك الداخلي، وقد تختلف بعض تفاصيل DOCX المعقدة عن Word. راجع الصفحات قبل الطباعة الرسمية.</p><div className="min-h-0 flex-1 bg-muted p-2"><NativeDocxPreview file={preview} printFrame /></div><div className="border-t p-3"><button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={confirmNativePrint}>فتح نافذة الطباعة</button></div></div></div>}
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
     <label className="block text-sm font-medium">نوع الوثيقة
       <select className="field-select mt-2 block w-full" value={selected} disabled={busy||loading} onChange={e=>setSelected(e.target.value)}>
@@ -234,7 +194,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>{preparingPreview?"جارٍ تجهيز PDF…":"طباعة"}</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة PDF الدقيقة لجميع الوثائق</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة PDF الأصلية" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
+      {preview&&!printReview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة DOCX الداخلية (دون Word)</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><div className="h-[70vh] min-h-[500px]"><NativeDocxPreview file={preview} /></div></div>}
     </>}
   </section>;
 }
