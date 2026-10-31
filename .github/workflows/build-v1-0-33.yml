@@ -2,7 +2,7 @@ name: Build signed EcoleArchive v1.0.33 candidate
 on:
   push:
     branches:
-      - release/v1-0-33-gmail-oauth
+      - release/v1-0-33-gmail-network
     paths:
       - 'src/**'
       - 'desktop/**'
@@ -115,7 +115,7 @@ jobs:
 
   publish-signed-update:
     needs: signed-windows-candidate
-    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-33-gmail-oauth'
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-33-gmail-network'
     runs-on: ubuntu-latest
     environment: windows-updates
     concurrency:
