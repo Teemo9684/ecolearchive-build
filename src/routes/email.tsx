@@ -30,9 +30,7 @@ function EmailCenter() {
     }
     setCompose(false);
   };
-  const [showSetup,setShowSetup]=useState(false);
   const [accountMenu,setAccountMenu]=useState(false);
-  const [provider,setProvider]=useState<"gmail"|"outlook">("gmail");
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
   const [connecting,setConnecting]=useState(false);
   const clientId=(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
@@ -43,7 +41,7 @@ function EmailCenter() {
     setConnecting(true);
     try {
       const email=await window.__TAURI_INTERNALS__!.invoke("gmail_connect",{clientId:clientId.trim()}) as string;
-      setGmailEmail(email);setShowSetup(false);toast.success("تم ربط الحساب: "+email);
+      setGmailEmail(email);toast.success("تم ربط الحساب: "+email);
     }catch(e){toast.error("تعذر ربط Gmail: "+String(e));}
     finally{setConnecting(false);}
   };
@@ -58,14 +56,13 @@ function EmailCenter() {
         <h1 className="flex items-center gap-2 text-2xl font-bold"><Mail className="h-7 w-7"/> البريد الإلكتروني</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gmail المدرسي</p>
       </div>
-      <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold flex items-center gap-2" onClick={()=>setAccountMenu(v=>!v)}><ChevronDown className="h-4 w-4"/> إدارة الحسابات</button><button className="rounded-xl border px-4 py-3 font-semibold" onClick={()=>setShowSetup(v=>!v)}>إضافة حساب</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
+      <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-4 py-3 font-semibold" disabled={connecting} onClick={()=>gmailEmail?setAccountMenu(v=>!v):void connectGmail()}>{gmailEmail?gmailEmail:connecting?"جارٍ الاتصال…":"إضافة حساب"}</button><button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground" onClick={()=>setCompose(true)}><Plus className="h-5 w-5"/> رسالة جديدة</button></div>
     </div>
-    {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">{gmailEmail?`الحساب المرتبط: ${gmailEmail}`:"لا يوجد حساب متصل حاليًا."} لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setShowSetup(true);setAccountMenu(false);}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled={!gmailEmail||connecting} onClick={()=>void signOut()} className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 disabled:opacity-50"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
+    {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">{gmailEmail?`الحساب المرتبط: ${gmailEmail}`:"لا يوجد حساب متصل حاليًا."} لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setAccountMenu(false);void connectGmail();}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled={!gmailEmail||connecting} onClick={()=>void signOut()} className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 disabled:opacity-50"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
     <div className="panel flex items-start gap-2 border-amber-300 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
       <div className="text-sm"><strong>{gmailEmail?`متصل بحساب ${gmailEmail}`:"Gmail غير متصل بعد."}</strong> {gmailEmail?"تم منح الموافقة لتطبيق Windows. عرض الرسائل وإرسالها سيُفعّلان بعد توصيل واجهة Gmail API.":"اضغط «إضافة حساب»، ووافق عبر صفحة Google الرسمية. لن يطلب البرنامج كلمة مرورك."}</div>
     </div>
-    {showSetup&&<div className="panel space-y-3 p-5 text-sm"><h2 className="font-bold">تسجيل الدخول إلى Gmail</h2><p className="text-muted-foreground">اضغط الزر، واختر حسابك من Google، ثم وافق على الصلاحيات. يعود الاتصال إلى البرنامج تلقائيًا.</p><button disabled={connecting||!clientId} onClick={()=>void connectGmail()} className="rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">{connecting?"بانتظار الموافقة في المتصفح…":"تسجيل الدخول باستخدام Google"}</button>{!clientId&&<p role="alert" className="text-amber-700">اتصال Google يحتاج تفعيلًا واحدًا من مطوّر EcoleArchive قبل استعمال الزر. لن تحتاج إلى إدخال معرّف أو إعدادات.</p>}<button className="rounded-lg border px-4 py-2" onClick={()=>setShowSetup(false)}>إغلاق</button></div>}
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
         {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
