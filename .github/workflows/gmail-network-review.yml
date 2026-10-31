@@ -34,6 +34,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+      - name: Prepare Tauri frontend directory for Rust-only verification
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop-web-dist | Out-Null
+          Set-Content -Path desktop-web-dist/index.html -Value '<!doctype html><html><body>OAuth test</body></html>'
       - name: Verify native Google OAuth client compiles on Windows
         shell: pwsh
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
