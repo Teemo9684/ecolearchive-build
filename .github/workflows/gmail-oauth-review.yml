@@ -1,0 +1,31 @@
+name: Gmail OAuth Rust verification (no release)
+on:
+  push:
+    branches:
+      - investigate/gmail-oauth-exchange
+    paths:
+      - 'desktop/src-tauri/src/**'
+      - 'desktop/src-tauri/Cargo.toml'
+      - 'desktop/src-tauri/Cargo.lock'
+      - '.github/workflows/gmail-oauth-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  oauth-rust-tests:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Check native Gmail OAuth and desktop compilation
+        shell: pwsh
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Test Gmail OAuth callbacks, PKCE and exchange forms
+        shell: pwsh
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib oauth_tests -- --nocapture
