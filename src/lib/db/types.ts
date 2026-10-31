@@ -100,6 +100,7 @@ export interface Settings {
   prefixIn: string;
   prefixOut: string;
   locale: "ar" | "fr";
+  gmailClientId?: string;
 }
 
 export interface AuditLog { id: ID; at: string; action: string; entity: string; entityId: ID; summary: string }
