@@ -134,7 +134,6 @@ function SettingsPage() {
 
       <section className="panel p-4" dir="rtl">
         <h2 className="mb-2 font-bold">إعداد اتصال Gmail</h2>
-        <p className="mb-3 text-sm text-muted-foreground">أدخل Google Client ID مرة واحدة على هذا الجهاز ثم اضغط حفظ. بعدها زر «إضافة حساب» في البريد يفتح Google مباشرة.</p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-0 flex-1 text-sm font-medium">Google Client ID
             <Input dir="ltr" className="mt-2" placeholder="xxxx.apps.googleusercontent.com" value={gmailClientId} onChange={e=>setGmailClientId(e.target.value)}/>
@@ -142,7 +141,6 @@ function SettingsPage() {
           <Button type="button" variant="outline" onClick={async()=>{try{if(isDesktop){await invokeDesktop("open_google_cloud_clients");}else{window.open("https://console.cloud.google.com/auth/clients","_blank","noopener,noreferrer");}}catch(e){toast.error("تعذر فتح Google Cloud: "+String(e));}}}>Google Cloud ↗</Button>
           <Button onClick={saveGmailClientId}>حفظ</Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">هذا المعرّف ليس كلمة سر. يُحفظ محليًا ولا يُرسل ضمن نسخ الأرشيف الاحتياطية.</p>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -209,7 +207,6 @@ function SettingsPage() {
 
       <section className="panel p-4">
         <h2 className="mb-1 font-bold">النسخ الاحتياطي الكامل والاستعادة</h2>
-        <p className="mb-3 text-sm text-muted-foreground">تشمل النسخة كل الجداول والملفات المرفقة مع بصمة SHA-256 لكل ملف للتحقق من السلامة عند الاستعادة. احفظها على قرص خارجي.</p>
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={async () => { setBusy(true); try { await exportFullBackup(); toast.success("تم إنشاء النسخة الاحتياطية"); } catch (e: any) { toast.error("تعذر إنشاء النسخة: " + e.message); } setBusy(false); }}>
             <DatabaseBackup className="h-4 w-4" />إنشاء نسخة احتياطية كاملة
@@ -238,7 +235,6 @@ function SettingsPage() {
       {isDesktop && (
         <section className="panel p-4">
           <h2 className="mb-2 font-bold">تحديث البرنامج عن بُعد</h2>
-          <p className="mb-3 text-sm text-muted-foreground">افحص الإصدارات الرسمية الموقّعة عند الاتصال بالإنترنت. لا يُثبَّت أي تحديث دون موافقتك. احفظ عملك وخذ نسخة احتياطية قبل تحديثات مهمة.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button disabled={updateBusy} onClick={checkUpdates}>{updateBusy ? "يرجى الانتظار…" : "البحث عن تحديثات"}</Button>
             {availableUpdate && <Button disabled={updateBusy} onClick={installUpdate}>تثبيت الإصدار {availableUpdate}</Button>}
