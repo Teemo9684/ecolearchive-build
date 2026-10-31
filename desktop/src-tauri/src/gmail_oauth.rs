@@ -86,7 +86,7 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
     let args:std::collections::HashMap<_,_>=query.query_pairs().map(|(a,b)|(a.to_string(),b.to_string())).collect();
     let valid=args.get("state").map(String::as_str)==Some(state.as_str()) && query.path()=="/";
     let success=valid && args.contains_key("code");
-    let message=if success{"تم ربط الحساب. يمكنك العودة إلى EcoleArchive."}else{"لم يكتمل الربط. ارجع إلى EcoleArchive وأعد المحاولة."};
+    let message=if success{"تمت موافقة Google. ارجع إلى EcoleArchive للتأكد من إتمام الاتصال."}else{"لم يكتمل الربط. ارجع إلى EcoleArchive وأعد المحاولة."};
     let html=format!("<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'><title>EcoleArchive</title><body style='font-family:sans-serif;text-align:center;padding:50px'><h2>{message}</h2><script>window.close()</script></body></html>");
     let response=format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",html.len(),html);
     stream.write_all(response.as_bytes()).ok();
@@ -103,7 +103,16 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
   ("client_id",client_id),("code",code.as_str()),("code_verifier",verifier.as_str()),
   ("redirect_uri",redirect.as_str()),("grant_type","authorization_code")
  ]).send().map_err(|e|e.to_string())?;
- if !response.status().is_success(){return Err("Google لم يقبل تبادل رمز التفويض. تحقق من إعدادات Desktop OAuth.".into())}
+ if !response.status().is_success(){
+  let status=response.status();
+  let body=response.text().unwrap_or_default();
+  let parsed:serde_json::Value=serde_json::from_str(&body).unwrap_or_default();
+  let code=parsed["error"].as_str().unwrap_or("unknown_error");
+  let description=parsed["error_description"].as_str().unwrap_or("");
+  let safe_code=if matches!(code,"invalid_request"|"invalid_client"|"invalid_grant"|"unauthorized_client"|"invalid_scope"|"access_denied"|"unsupported_grant_type"){code}else{"oauth_error"};
+  let safe_description=description.chars().filter(|c|!c.is_control()).take(160).collect::<String>();
+  return Err(format!("Google OAuth: {safe_code} (HTTP {status}). {safe_description}"));
+ }
  let token:TokenResponse=response.json().map_err(|e|e.to_string())?;
  let profile=http.get("https://www.googleapis.com/oauth2/v3/userinfo").bearer_auth(&token.access_token).send().map_err(|e|e.to_string())?;
  if !profile.status().is_success(){return Err("تعذر التحقق من عنوان البريد الإلكتروني".into())}
