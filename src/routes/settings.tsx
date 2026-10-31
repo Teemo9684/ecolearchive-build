@@ -152,8 +152,6 @@ function SettingsPage() {
           <Button type="button" variant="outline" onClick={async()=>{if(!gmailClientSecret.trim()){toast.error("أدخل القيمة أولًا");return;}try{await (window.__TAURI_INTERNALS__ as {invoke:(name:string,args?:unknown)=>Promise<void>}).invoke("gmail_set_client_secret",{secret:gmailClientSecret});setGmailClientSecret("");setClientSecretSaved(true);toast.success("تم حفظ بيانات OAuth المشفّرة محليًا");}catch(e){toast.error(String(e));}}}>حفظ بيانات OAuth</Button>
           {clientSecretSaved&&<Button type="button" variant="ghost" onClick={async()=>{try{await (window.__TAURI_INTERNALS__ as {invoke:(name:string,args?:unknown)=>Promise<void>}).invoke("gmail_set_client_secret",{secret:""});setClientSecretSaved(false);toast.success("تم حذف القيمة");}catch(e){toast.error(String(e));}}}>مسح</Button>}
         </div>}
-        <div className="hidden">
-        </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
