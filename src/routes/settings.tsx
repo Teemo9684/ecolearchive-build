@@ -30,14 +30,15 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const current = useSettings();
   const [s, setS] = useState<Settings>(current);
-  const [gmailClientId,setGmailClientId]=useState(()=>{try{return localStorage.getItem("ecolearchive-google-desktop-client-id")||"";}catch{return "";}});
-  const saveGmailClientId=()=>{
+  const [gmailClientId,setGmailClientId]=useState(()=>current.gmailClientId || localStorage.getItem("ecolearchive-google-desktop-client-id") || "");
+  const saveGmailClientId=async()=>{
     const value=gmailClientId.trim();
     if(value&&!/^[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(value)){toast.error("Google Client ID غير صحيح");return;}
-    try{if(value)localStorage.setItem("ecolearchive-google-desktop-client-id",value);else localStorage.removeItem("ecolearchive-google-desktop-client-id");toast.success("تم حفظ إعداد اتصال Gmail على هذا الجهاز");}
+    try{await repo<Settings>("settings").put({...current,gmailClientId:value});localStorage.removeItem("ecolearchive-google-desktop-client-id");toast.success("تم حفظ Google Client ID في قاعدة بيانات البرنامج والنسخ الاحتياطية");}
     catch{toast.error("تعذر حفظ إعداد Gmail");}
   };
   useEffect(() => setS(current), [current]);
+  useEffect(()=>{if(current.gmailClientId)setGmailClientId(current.gmailClientId);},[current.gmailClientId]);
   const { data: years } = useCollection<AcademicYear>("academicYears");
   const { data: cats } = useCollection<ArchiveCategory>("archiveCategories");
   const { data: docs } = useCollection<DocumentRecord>("documents");
