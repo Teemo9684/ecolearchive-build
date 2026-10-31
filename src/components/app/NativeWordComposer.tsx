@@ -159,6 +159,13 @@ export function NativeWordComposer() {
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
     finally{setBusy(false);setPreparingPreview(false);}
   };
+  const openExactInWord=async()=>{
+    try {
+      const output=await ready();
+      const base64=encode64(new Uint8Array(await bytesOf(output)));
+      await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64,fileName:output.name,print:false});
+    } catch(e) { toast.error("تعذر فتح الوثيقة في Word: "+String(e instanceof Error?e.message:e)); }
+  };
   const confirmNativePrint=()=>{
     const frame=document.getElementById("ecolearchive-print-frame") as HTMLIFrameElement|null;
     if(!frame?.contentWindow){toast.error("لم تجهز المعاينة بعد");return;}
@@ -194,7 +201,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>{preparingPreview?"جارٍ تجهيز PDF…":"طباعة"}</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&!printReview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة DOCX الداخلية (دون Word)</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><div className="h-[70vh] min-h-[500px]"><NativeDocxPreview file={preview} /></div></div>}
+      {preview&&!printReview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة DOCX الداخلية (دون Word)</span><div className="flex gap-2"><button className="rounded-md border px-3 py-1" onClick={()=>void openExactInWord()}>فتح التصميم الأصلي في Word</button><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div></div><div className="h-[70vh] min-h-[500px]"><NativeDocxPreview file={preview} /></div></div>}
     </>}
   </section>;
 }
