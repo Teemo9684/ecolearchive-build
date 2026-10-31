@@ -521,6 +521,95 @@ async fn preview_generated_docx_pdf(base64: String) -> Result<String, String> {
         .await.map_err(|e| format!("Preview worker failed: {}", e))?
 }
 
+
+#[cfg(target_os="windows")]
+struct WordPdfWorker {
+    process: std::process::Child,
+    stdin: std::process::ChildStdin,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+}
+#[cfg(target_os="windows")]
+static WORD_PDF_WORKER: std::sync::OnceLock<std::sync::Mutex<Option<WordPdfWorker>>> = std::sync::OnceLock::new();
+
+#[cfg(target_os="windows")]
+fn new_word_pdf_worker() -> Result<WordPdfWorker,String> {
+    use std::process::{Command,Stdio};
+    use std::os::windows::process::CommandExt;
+    use std::io::Write;
+    const CREATE_NO_WINDOW:u32=0x08000000;
+    let dir=std::env::temp_dir().join("EcoleArchive").join("word-preview");
+    fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+    let script_path=dir.join("word-pdf-worker.ps1");
+    // Requests are base64-encoded UTF-8 paths, separated by TAB; ASCII OK/ERR
+    // responses are the only output on stdout. Word remains alive between requests.
+    let script=r#"$ErrorActionPreference='Stop'
+$word=$null
+try {
+  $word=New-Object -ComObject Word.Application
+  $word.Visible=$false
+  $word.DisplayAlerts=0
+  $word.ScreenUpdating=$false
+  while ($null -ne ($request=[Console]::ReadLine())) {
+    $doc=$null
+    try {
+      $p=$request.Split([char]9)
+      if ($p.Length -ne 2) { throw 'Invalid request' }
+      $source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[0]))
+      $target=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))
+      $doc=$word.Documents.Open($source,$false,$true)
+      $doc.ExportAsFixedFormat($target,17)
+      [Console]::Out.WriteLine('OK')
+    } catch {
+      [Console]::Out.WriteLine('ERR '+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_.Exception.Message)))
+    } finally {
+      if ($null -ne $doc) { try { $doc.Close(0) } catch {} }
+    }
+    [Console]::Out.Flush()
+  }
+} finally {
+  if ($null -ne $word) { try { $word.Quit() } catch {} }
+}"#;
+    fs::write(&script_path,script).map_err(|e|e.to_string())?;
+    let mut process=Command::new("powershell.exe")
+        .arg("-NoProfile").arg("-NonInteractive").arg("-WindowStyle").arg("Hidden")
+        .arg("-File").arg(&script_path)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn().map_err(|e|format!("Word conversion worker: {}",e))?;
+    let stdin=process.stdin.take().ok_or("Worker stdin missing")?;
+    let stdout=std::io::BufReader::new(process.stdout.take().ok_or("Worker stdout missing")?);
+    let _=&mut process;
+    Ok(WordPdfWorker{process,stdin,stdout})
+}
+
+#[cfg(target_os="windows")]
+fn word_pdf_worker_convert(docx:&std::path::Path,pdf:&std::path::Path)->Result<(),String>{
+    use std::io::{BufRead,Write};
+    use base64::Engine;
+    let mutex=WORD_PDF_WORKER.get_or_init(||std::sync::Mutex::new(None));
+    let mut guard=mutex.lock().map_err(|_|"Word worker lock poisoned")?;
+    let encode=|path:&std::path::Path|base64::engine::general_purpose::STANDARD.encode(path.to_string_lossy().as_bytes());
+    let request=format!("{}\\t{}\\n",encode(docx),encode(pdf));
+    for retry in 0..2 {
+        if guard.is_none(){*guard=Some(new_word_pdf_worker()?);}
+        let worker=guard.as_mut().ok_or("Worker unavailable")?;
+        if worker.stdin.write_all(request.as_bytes()).and_then(|_|worker.stdin.flush()).is_err(){
+            if let Some(mut process)=guard.take(){let _=process.process.kill();let _=process.process.wait();}
+            if retry==0 {continue;}return Err("Word worker stopped".into());
+        }
+        let mut answer=String::new();
+        if worker.stdout.read_line(&mut answer).ok().filter(|n|*n>0).is_none(){
+            if let Some(mut process)=guard.take(){let _=process.process.kill();let _=process.process.wait();}
+            if retry==0 {continue;}return Err("Word worker did not respond".into());
+        }
+        if answer.trim()=="OK"{return Ok(());}
+        let error=answer.trim().strip_prefix("ERR ").and_then(|s|base64::engine::general_purpose::STANDARD.decode(s).ok())
+            .and_then(|v|String::from_utf8(v).ok()).unwrap_or_else(||"Word PDF conversion failed".into());
+        return Err(error);
+    }
+    Err("Word conversion failed".into())
+}
+
 fn preview_generated_docx_pdf_blocking(base64: String) -> Result<String, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
@@ -539,31 +628,10 @@ fn preview_generated_docx_pdf_blocking(base64: String) -> Result<String, String>
         let pdf = dir.join(format!("preview-{}.pdf", &checksum[..24]));
         if !pdf.is_file() {
             fs::write(&docx, &bytes).map_err(|e|e.to_string())?;
-            let source = docx.to_string_lossy().replace("'", "''");
-            let target = pdf.to_string_lossy().replace("'", "''");
-            let script = format!(r#"$ErrorActionPreference='Stop'
-$word=$null
-$document=$null
-try {{
-  $word=New-Object -ComObject Word.Application
-  $word.Visible=$false
-  $word.DisplayAlerts=0
-  $document=$word.Documents.Open('{}',$false,$true)
-  $document.ExportAsFixedFormat('{}',17)
-}} finally {{
-  if($null -ne $document) {{ $document.Close(0) }}
-  if($null -ne $word) {{ $word.Quit() }}
-}}
-"#,source,target);
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            let result=Command::new("powershell.exe")
-                .args(["-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command",&script])
-                .creation_flags(CREATE_NO_WINDOW)
-                .output().map_err(|e|format!("تعذر تشغيل محرك Word: {}",e))?;
-            if !result.status.success() || !pdf.is_file() {
-                let stderr=String::from_utf8_lossy(&result.stderr);
-                return Err(format!("فشل إنشاء معاينة PDF بواسطة Word: {}",stderr.trim()));
-            }
+            // A single PowerShell/Word COM worker is retained between documents.
+            // Requests are serialized because Office COM is single-threaded.
+            word_pdf_worker_convert(&docx, &pdf)?;
+            if !pdf.is_file() {return Err("Word did not create the PDF".into());}
         }
         let result=fs::read(pdf).map_err(|e|e.to_string())?;
         if !result.starts_with(b"%PDF") {return Err("Invalid generated PDF".into())}
