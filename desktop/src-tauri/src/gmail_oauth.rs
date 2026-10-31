@@ -178,7 +178,6 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
  let http=reqwest::blocking::Client::builder()
   .connect_timeout(Duration::from_secs(12))
   .timeout(Duration::from_secs(45))
-  .tls_backend_native()
   .build().map_err(|e|format!("تعذر إعداد اتصال Google HTTPS: {}",network_error_kind(&e)))?;
  let secret=read_client_secret(app)?;
  let form=exchange_form(client_id,code.as_str(),verifier.as_str(),redirect.as_str(),secret.as_deref());
