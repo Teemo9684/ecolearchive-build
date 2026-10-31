@@ -171,8 +171,11 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
     };
     let first=String::from_utf8_lossy(&data[..n]).lines().next().unwrap_or("").to_owned();
     let Some(target)=first.strip_prefix("GET ").and_then(|v|v.split_whitespace().next())else{continue;};
-    // Ignore unrelated requests such as favicon fetches rather than ending login.
-    if !target.starts_with("/?"){continue;}
+    // Reject unrelated browser requests (favicon, probes) without ending OAuth.
+    if !target.starts_with("/?"){
+     let _=stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n");
+     continue;
+    }
     let parsed=oauth_callback(target,port,&state);
     let success=matches!(&parsed,Ok(Some(_)));
     let message=if success{"تمت موافقة Google. ارجع إلى EcoleArchive للتأكد من إتمام الاتصال."}else{"لم يكتمل الربط. ارجع إلى EcoleArchive وأعد المحاولة."};
