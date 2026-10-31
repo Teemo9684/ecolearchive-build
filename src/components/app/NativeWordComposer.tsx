@@ -1,6 +1,3 @@
-import { renderAsync } from "docx-preview";
-import { SchoolCertificateA4 } from "./SchoolCertificateA4";
-import { PrintReviewDialog } from "./PrintReviewDialog";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractApprovedDocxFields, renderApprovedDocxFile } from "@/lib/native-docx";
@@ -39,10 +36,7 @@ export function NativeWordComposer() {
   const [busy,setBusy]=useState(false);
   const [preview,setPreview]=useState<string|null>(null);
   const [printReview,setPrintReview]=useState(false);
-  const previewFrame=useRef<HTMLIFrameElement|null>(null);
-  const fastPreviewContainer=useRef<HTMLDivElement|null>(null);
-  const fastDoc=useRef<{key:string;bytes:ArrayBuffer}|null>(null);
-  const [accuratePreviewLoading,setAccuratePreviewLoading]=useState(false);
+  const [printLoading,setPrintLoading]=useState(false);
   const preciseSequence=useRef(0);
   const previewCache = useRef<{key:string;url:string}|null>(null);
   const [preparingPreview,setPreparingPreview]=useState(false);
@@ -118,7 +112,6 @@ export function NativeWordComposer() {
     }
     return renderApprovedDocxFile(source,data,selected.replace(/\.docx$/i,""));
   };
-  const certificateTemplate=/شهادة\s*مدرسية/i.test(selected);
   const previewKey=JSON.stringify([selected,values]);
   const latestPreviewKey=useRef(previewKey);
   latestPreviewKey.current=previewKey;
@@ -142,22 +135,6 @@ export function NativeWordComposer() {
     previewPending.current={key,promise:job};
     try{return await job;}finally{if(previewPending.current?.promise===job)previewPending.current=null;}
   };
-  // Render DOCX locally inside WebView2 only after an explicit Preview click.
-  // Avoid launching Word, PowerShell or any network requests.
-  useEffect(()=>{
-    if(preview!=="local" || !fastDoc.current || !fastPreviewContainer.current)return;
-    let cancelled=false;
-    const host=fastPreviewContainer.current;
-    host.replaceChildren();
-    // Never silently treat HTML approximation as a print-accurate document.
-    void renderAsync(fastDoc.current.bytes,host,host,{
-      inWrapper:true,ignoreWidth:false,ignoreHeight:false,
-      breakPages:true,renderHeaders:true,renderFooters:true
-    }).catch(error=>{if(!cancelled)toast.error("تعذر عرض المعاينة السريعة: "+String(error));});
-    return()=>{cancelled=true;};
-  },[preview]);
-  // Never start Word or PDF conversion while the user edits fields.
-  // Conversion is triggered solely by an explicit Preview click.
   const preserveDirectoryEntries=()=>{
     const store=(key:string, field:string, old:string[], setter:(v:string[])=>void)=>{
       const value=values[field]?.trim();
@@ -177,34 +154,9 @@ export function NativeWordComposer() {
     try{
       const key=previewKey;
       if(mode==="preview"){
-        if(certificateTemplate){
-          ++preciseSequence.current;
-          setAccuratePreviewLoading(false);
-          setPreview("certificate-a4");
-          preserveDirectoryEntries();
-          return;
-        }
-        if(fastDoc.current?.key!==key){
-          const generated=await ready();
-          fastDoc.current={key,bytes:await bytesOf(generated)};
-        }
         const sequence=++preciseSequence.current;
-        // Immediate approximate view; replace it with the authoritative Word PDF.
-        // PDF is cached by document content both in the UI and Rust layer.
-        if(previewCache.current?.key===key){
-          setPreview(previewCache.current.url);
-          setAccuratePreviewLoading(false);
-        }else{
-          setPreview("local");
-          setAccuratePreviewLoading(true);
-          void getPreviewUrl(key).then(url=>{
-            if(sequence===preciseSequence.current&&url&&latestPreviewKey.current===key)setPreview(url);
-          }).catch(error=>{
-            if(sequence===preciseSequence.current)toast.error("تعذر إعداد المعاينة الدقيقة: "+String(error));
-          }).finally(()=>{
-            if(sequence===preciseSequence.current)setAccuratePreviewLoading(false);
-          });
-        }
+        const url=await getPreviewUrl(key);
+        if(sequence===preciseSequence.current&&url)setPreview(url);
         preserveDirectoryEntries();
         return;
       }
@@ -228,33 +180,21 @@ export function NativeWordComposer() {
     finally{setBusy(false);setPreparingPreview(false);}
   };
   const confirmNativePrint=async()=>{
-    if(busy)return;
-    setBusy(true);
+    if(printLoading||busy)return;
+    setPrintLoading(true);
     try{
-      const output=await ready();
-      const encoded=encode64(new Uint8Array(await bytesOf(output)));
+      const url=await getPreviewUrl(previewKey);
+      if(!url)throw Error("تعذر تجهيز ملف PDF");
+      const pdfBytes=new Uint8Array(await (await fetch(url)).arrayBuffer());
       if(!isDesktopRuntime())throw Error("الطباعة تتطلب نسخة Windows");
-      await window.__TAURI_INTERNALS__!.invoke("open_generated_docx",{base64:encoded,fileName:output.name,print:true});
-      preserveDirectoryEntries();
+      await window.__TAURI_INTERNALS__!.invoke("open_generated_pdf",{base64:encode64(pdfBytes)});
       setPrintReview(false);
+      preserveDirectoryEntries();
     }catch(e){toast.error(String(e instanceof Error?e.message:e));}
-    finally{setBusy(false);}
-  };
-  const printPreview=()=>{
-    // The embedded PDF viewer prints the exact PDF currently shown.
-    // If WebView2 blocks iframe printing, keep the existing native Word
-    // printing pathway available as a safe fallback.
-    try{
-      const frame=previewFrame.current;
-      if(!frame?.contentWindow)throw Error("PDF viewer is not ready");
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    }catch{
-      void action("print");
-    }
+    finally{setPrintLoading(false);}
   };
   return <section className="panel mb-5 space-y-5 p-5" dir="rtl">
-    {printReview&&<PrintReviewDialog selected={selected} values={values} busy={busy} onClose={()=>setPrintReview(false)} onConfirm={()=>void confirmNativePrint()}/> }
+    {printReview&&<div role="dialog" aria-modal="true" aria-label="الطباعة" className="fixed inset-0 z-[90] bg-black/60 p-3 flex items-center justify-center"><div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-xl"><div className="flex items-center justify-between gap-3 border-b p-4"><strong>معاينة الطباعة الدقيقة — {selected.replace(/\\.docx$/i,"")}</strong><button className="rounded-md border px-3 py-2" disabled={printLoading} onClick={()=>setPrintReview(false)}>إغلاق</button></div><div className="min-h-0 flex-1 bg-muted p-2">{preview&&preview!=="local"&&preview!=="certificate-a4"?<iframe className="h-full w-full bg-white" title="ملف PDF النهائي" src={preview}/>:<p className="p-6 text-center">اضغط «تجهيز المعاينة» لعرض ملف PDF الأصلي قبل الطباعة.</p>}</div><div className="flex flex-wrap justify-between gap-2 border-t p-3"><button className="rounded-md border px-4 py-2" disabled={printLoading} onClick={()=>void action("preview")}>تجهيز المعاينة الدقيقة</button><button className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50" disabled={printLoading||busy} onClick={()=>void confirmNativePrint()}>{printLoading?"جارٍ تجهيز PDF…":"فتح PDF النهائي للطباعة"}</button></div></div></div>}
     <h2 className="text-lg font-bold">إنشاء وثيقة</h2>
     <label className="block text-sm font-medium">نوع الوثيقة
       <select className="field-select mt-2 block w-full" value={selected} disabled={busy||loading} onChange={e=>setSelected(e.target.value)}>
@@ -282,7 +222,7 @@ export function NativeWordComposer() {
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
-      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>{accuratePreviewLoading?"معاينة سريعة مؤقتة — جارٍ تحضير نسخة Word الدقيقة…":"معاينة الوثيقة قبل الطباعة"}</span><div className="flex items-center gap-2"><button className="rounded-md border px-3 py-1" onClick={preview==="local"||preview==="certificate-a4"?()=>void action("print"):printPreview}>طباعة المعاينة</button><button className="rounded-md border px-3 py-1" onClick={()=>{preciseSequence.current++;setAccuratePreviewLoading(false);setPreview(null);}}>إغلاق المعاينة</button></div></div>{preview==="certificate-a4" ? <div className="h-[70vh] min-h-[500px] overflow-auto rounded-lg bg-gray-100 p-3"><SchoolCertificateA4 data={values}/></div> : preview==="local" ? <div ref={fastPreviewContainer} className="h-[70vh] min-h-[500px] w-full overflow-auto rounded-lg bg-gray-100" /> : <iframe ref={previewFrame} title="معاينة الوثيقة" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" />}</div>}
+      {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة PDF الدقيقة لجميع الوثائق</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة PDF الأصلية" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
     </>}
   </section>;
 }
