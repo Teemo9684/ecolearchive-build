@@ -674,11 +674,32 @@ fn open_generated_pdf(base64: String) -> Result<(), String> {
     { let _ = bytes; Err("Requires Windows".into()) }
 }
 
+
+#[tauri::command]
+fn open_google_cloud_clients() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let target: Vec<u16> = std::ffi::OsStr::new("https://console.cloud.google.com/auth/clients")
+            .encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe { ShellExecuteW(
+            std::ptr::null_mut(), std::ptr::null(), target.as_ptr(),
+            std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL
+        ) };
+        if (result as isize) <= 32 { return Err(format!("تعذر فتح المتصفح (Windows error {})", result as isize)); }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    { Err("Requires Windows".into()) }
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
+      .invoke_handler(tauri::generate_handler![open_google_cloud_clients,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
