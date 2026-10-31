@@ -16,10 +16,10 @@ fn account_path(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>{
 }
 #[cfg(windows)]
 fn protect(bytes:&[u8],decrypt:bool)->Result<Vec<u8>,String>{
- use windows_sys::Win32::Security::Cryptography::{DATA_BLOB,CryptProtectData,CryptUnprotectData,CRYPTPROTECT_UI_FORBIDDEN};
+ use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB,CryptProtectData,CryptUnprotectData,CRYPTPROTECT_UI_FORBIDDEN};
  use windows_sys::Win32::Foundation::LocalFree;
- let mut input=DATA_BLOB{cbData:bytes.len() as u32,pbData:bytes.as_ptr() as *mut u8};
- let mut output=DATA_BLOB{cbData:0,pbData:std::ptr::null_mut()};
+ let mut input=CRYPT_INTEGER_BLOB{cbData:bytes.len() as u32,pbData:bytes.as_ptr() as *mut u8};
+ let mut output=CRYPT_INTEGER_BLOB{cbData:0,pbData:std::ptr::null_mut()};
  let ok=unsafe{if decrypt{CryptUnprotectData(&mut input,std::ptr::null_mut(),std::ptr::null(),std::ptr::null_mut(),std::ptr::null_mut(),CRYPTPROTECT_UI_FORBIDDEN,&mut output)}else{CryptProtectData(&mut input,std::ptr::null(),std::ptr::null_mut(),std::ptr::null_mut(),std::ptr::null_mut(),CRYPTPROTECT_UI_FORBIDDEN,&mut output)}};
  if ok==0{return Err("تعذر حماية بيانات Gmail باستخدام Windows".into())}
  let result=unsafe{std::slice::from_raw_parts(output.pbData,output.cbData as usize).to_vec()};
