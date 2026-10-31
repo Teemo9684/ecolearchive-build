@@ -1,0 +1,30 @@
+name: Gmail Windows HTTPS review (no release)
+on:
+  push:
+    branches:
+      - fix/gmail-windows-https-diagnostics
+    paths:
+      - 'desktop/src-tauri/src/**'
+      - 'desktop/src-tauri/Cargo.toml'
+      - '.github/workflows/gmail-network-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-oauth-check:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Verify native Google OAuth client compiles on Windows
+        shell: pwsh
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Run OAuth unit tests
+        shell: pwsh
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib oauth_tests
