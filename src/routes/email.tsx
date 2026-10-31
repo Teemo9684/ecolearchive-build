@@ -33,11 +33,12 @@ function EmailCenter() {
   const [accountMenu,setAccountMenu]=useState(false);
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
   const [connecting,setConnecting]=useState(false);
-  const clientId=(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+  const readClientId=()=>{try{return (localStorage.getItem("ecolearchive-google-desktop-client-id")||"").trim();}catch{return "";}};
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   const connectGmail=async()=>{
     if(!isDesktopRuntime()){toast.error("تسجيل الدخول يعمل فقط في نسخة Windows");return;}
-    if(!clientId.endsWith(".apps.googleusercontent.com")){toast.error("ربط Google لم يُفعّل بعد من مطوّر البرنامج");return;}
+    const clientId=readClientId();
+    if(!clientId.endsWith(".apps.googleusercontent.com")){toast.error("أدخل Google Client ID واحفظه مرة واحدة من الإعدادات");return;}
     setConnecting(true);
     try {
       const email=await window.__TAURI_INTERNALS__!.invoke("gmail_connect",{clientId:clientId.trim()}) as string;
