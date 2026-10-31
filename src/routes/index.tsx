@@ -3,7 +3,7 @@ import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  Bell, ChevronDown, ChevronLeft, Search, FilePlus2, Send, Award, FileText, Inbox, UserRound, FolderOpen,
+  Bell, ChevronDown, ChevronLeft, Search, FilePlus2, Send, Mail, FileText, Inbox, UserRound, FolderOpen,
   Users, BarChart3, BarChart2, Zap, FileSpreadsheet, Printer, Folder, CloudUpload,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
@@ -227,7 +227,7 @@ function Dashboard() {
         {/* Quick actions */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Action to="/templates" title="إنشاء وثيقة" sub="نماذج جاهزة للاستعمال" icon={FileText} tone="tone-gold" />
-          <Action to="/templates" title="شهادة مدرسية" sub="إصدار شهادة مدرسية" icon={Award} tone="tone-pink" />
+          <Action to="/email" title="البريد الإلكتروني" sub="إدارة بريد Gmail المدرسي" icon={Mail} tone="tone-pink" />
           <Action to="/mail/outgoing" title="جدول إرسال" sub="إنشاء جدول إرسال" icon={Send} tone="tone-green" />
           <Action to="/mail/incoming" title="مراسلة جديدة" sub="إنشاء مراسلة إدارية" icon={FilePlus2} tone="tone-blue" />
         </div>
