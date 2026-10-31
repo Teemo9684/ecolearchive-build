@@ -573,11 +573,43 @@ try {{
     {let _=bytes;Err("Requires Windows with Microsoft Word".into())}
 }
 
+
+#[tauri::command]
+fn open_generated_pdf(base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64).map_err(|_| "Invalid PDF payload")?;
+    if bytes.len() < 8 || bytes.len() > 25 * 1024 * 1024 || !bytes.starts_with(b"%PDF") {
+        return Err("Invalid PDF document".into());
+    }
+    #[cfg(target_os="windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let dir = std::env::temp_dir().join("EcoleArchive").join("word-preview");
+        fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+        let pdf = dir.join(format!("print-{}.pdf", &hash[..24]));
+        fs::write(&pdf, bytes).map_err(|e|e.to_string())?;
+        let filename: Vec<u16> = pdf.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let verb: Vec<u16> = std::ffi::OsStr::new("open").encode_wide().chain(std::iter::once(0)).collect();
+        let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), filename.as_ptr(),
+            std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+        if (result as isize) <= 32 {
+            return Err(format!("تعذر فتح ملف PDF للطباعة (Windows error {})", result as isize));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os="windows"))]
+    { let _ = bytes; Err("Requires Windows".into()) }
+}
+
 pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf])
+      .invoke_handler(tauri::generate_handler![list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
