@@ -148,7 +148,19 @@ export function NativeWordComposer() {
   };
   const action=async(mode:"preview"|"save"|"print")=>{
     if(busy)return;
-    if(mode==="print"){setPrintReview(true);return;}
+    if(mode==="print"){
+      setPreparingPreview(true);
+      setBusy(true);
+      try{
+        const url=await getPreviewUrl(previewKey);
+        if(!url)throw Error("تعذر تجهيز المعاينة الدقيقة");
+        setPreview(url);
+        setPrintReview(true);
+        preserveDirectoryEntries();
+      }catch(e){toast.error(String(e instanceof Error?e.message:e));}
+      finally{setBusy(false);setPreparingPreview(false);}
+      return;
+    }
     setBusy(true);
     if(mode==="preview")setPreparingPreview(true);
     try{
@@ -219,7 +231,7 @@ export function NativeWordComposer() {
       <div className="flex flex-wrap gap-3">
         <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("preview")}>{preparingPreview?"جارٍ تجهيز المعاينة…":"معاينة"}</button>
         <button className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={()=>void action("save")}>حفظ</button>
-        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>طباعة</button>
+        <button className="rounded-lg border px-5 py-2 disabled:opacity-50" disabled={busy} onClick={()=>void action("print")}>{preparingPreview?"جارٍ تجهيز PDF…":"طباعة"}</button>
       </div>
       {preparingPreview && <p role="status" className="text-sm text-muted-foreground">جارٍ التحضير…</p>}
       {preview&&<div className="overflow-hidden rounded-xl border bg-muted p-2"><div className="mb-2 flex items-center justify-between px-2 text-sm font-semibold"><span>معاينة PDF الدقيقة لجميع الوثائق</span><button className="rounded-md border px-3 py-1" onClick={()=>setPreview(null)}>إغلاق المعاينة</button></div><iframe title="معاينة PDF الأصلية" src={preview} className="h-[70vh] min-h-[500px] w-full rounded-lg bg-white" /></div>}
