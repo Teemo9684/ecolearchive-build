@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { renderAsync } from "docx-preview";
+import PizZip from "pizzip";
 
 /** Isolated, offline DOCX preview. This is a browser rendering, not Word-identical pagination. */
 export function NativeDocxPreview({ file, printFrame = false }: { file: File; printFrame?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [complexShapes, setComplexShapes] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -23,6 +25,11 @@ export function NativeDocxPreview({ file, printFrame = false }: { file: File; pr
         doc.head.appendChild(reset);
         const bytes = await file.arrayBuffer();
         if (!active) return;
+        // Word drawing canvases (DrawingML/VML) are not faithfully reproduced by docx-preview.
+        // Detect these templates and show an explicit fidelity warning instead of silently dropping artwork.
+        const zip = new PizZip(bytes);
+        const xml = zip.file("word/document.xml")?.asText() ?? "";
+        setComplexShapes(/<w:pict(?:\\s|>)|<wps:wsp(?:\\s|>)|<v:shape(?:\\s|>)/.test(xml));
         await renderAsync(bytes, doc.body, doc.head, {
           breakPages: true, inWrapper: true, useBase64URL: true,
           ignoreLastRenderedPageBreak: false,
@@ -39,6 +46,7 @@ export function NativeDocxPreview({ file, printFrame = false }: { file: File; pr
 
   return <div className="relative h-full min-h-[500px]">
     {loading && <p role="status" className="p-3 text-sm">جارٍ تجهيز العرض الداخلي…</p>}
+    {complexShapes && !loading && !error && <p className="p-2 text-xs text-amber-700" role="note">هذا القالب يحتوي على زخارف Word لا يدعمها العرض السريع بالكامل؛ استعمل «فتح التصميم الأصلي في Word» لمراجعة النسخة الرسمية قبل الطباعة.</p>}
     {error && <p role="alert" className="p-3 text-sm text-red-600">تعذر عرض DOCX: {error}</p>}
     <iframe ref={frame} id={printFrame ? "ecolearchive-print-frame" : undefined}
       title="معاينة DOCX الداخلية" className="h-full min-h-[500px] w-full rounded bg-white"
