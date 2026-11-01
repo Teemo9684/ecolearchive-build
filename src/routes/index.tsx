@@ -185,8 +185,8 @@ function Dashboard() {
             <LovableSchoolLogo logo={approvedLogo} className="h-48 w-48" />
           </div>
           <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
-            <div className="glass mx-auto mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-success" />السنة الدراسية {settings.currentYear}
+            <div className="glass mx-auto mb-3 inline-flex max-w-full items-center justify-center rounded-full px-5 py-1.5 text-center">
+              <span className="font-normal leading-relaxed text-xl text-inherit md:text-2xl" style={{ fontFamily: '"Traditional Arabic", "Noto Naskh Arabic", "Amiri", serif' }} dir="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>
             </div>
             <h1 className="text-2xl font-bold drop-shadow-lg md:text-4xl">{settings.schoolName}</h1>
             <div className="mt-1 flex items-center justify-center gap-3 text-base opacity-90 md:text-xl">
@@ -218,6 +218,10 @@ function Dashboard() {
                 <div className="truncate text-sm font-semibold">{dateStr}</div>
               </div>
               <div className="gold-text font-sans text-3xl font-bold tabular-nums">{timeStr}</div>
+            </div>
+            <div className="glass flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold">
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-success" />
+              <span>السنة الدراسية {settings.currentYear}</span>
             </div>
           </div>
         </div>
