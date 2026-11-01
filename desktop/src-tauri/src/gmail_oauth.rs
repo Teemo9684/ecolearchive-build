@@ -384,6 +384,41 @@ pub async fn gmail_read_message(app:tauri::AppHandle,id:String)->Result<String,S
  }).await.map_err(|e|e.to_string())?
 }
 
+#[tauri::command]
+pub async fn gmail_open_attachment_for_print(app:tauri::AppHandle,name:String,mime:String,data:String)->Result<(),String>{
+ let allowed=match mime.as_str(){"application/pdf"=>".pdf","image/png"=>".png","image/jpeg"=>".jpg","image/gif"=>".gif","image/webp"=>".webp",_=>return Err("نوع المرفق غير مدعوم للطباعة".into())};
+ if data.len()>18*1024*1024{return Err("حجم المرفق كبير جدًا للطباعة".into())}
+ let bytes=base64::engine::general_purpose::STANDARD.decode(&data).map_err(|_|"ترميز المرفق غير صالح".to_string())?;
+ if bytes.len()>12*1024*1024{return Err("المرفق كبير جدًا للطباعة".into())}
+ let valid=match mime.as_str(){
+  "application/pdf"=>bytes.starts_with(b"%PDF-"),
+  "image/png"=>bytes.starts_with(&[137,80,78,71,13,10,26,10]),
+  "image/jpeg"=>bytes.starts_with(&[255,216,255]),
+  "image/gif"=>bytes.starts_with(b"GIF87a")||bytes.starts_with(b"GIF89a"),
+  "image/webp"=>bytes.len()>12&&bytes.starts_with(b"RIFF")&&&bytes[8..12]==b"WEBP",
+  _=>false
+ };
+ if !valid{return Err("نوع الملف لا يطابق محتواه".into())}
+ let dir=app.path().app_cache_dir().map_err(|e|e.to_string())?.join("gmail-print");
+ fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+ let digest=Sha256::digest(&bytes);
+ let id=digest.iter().take(12).map(|b|format!("{b:02x}")).collect::<String>();
+ let filename=format!("{}-{}{}",id,safe_filename(&name).trim_end_matches(allowed),allowed);
+ let path=dir.join(filename);
+ fs::write(&path,&bytes).map_err(|e|e.to_string())?;
+ #[cfg(windows)]{
+  use std::os::windows::ffi::OsStrExt;
+  use windows_sys::Win32::UI::Shell::ShellExecuteW;
+  let verb:Vec<u16>="open".encode_utf16().chain(std::iter::once(0)).collect();
+  let file:Vec<u16>=path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+  let result=unsafe{ShellExecuteW(std::ptr::null_mut(),verb.as_ptr(),file.as_ptr(),std::ptr::null(),std::ptr::null(),1)};
+  if (result as isize)<=32{return Err("تعذر فتح عارض Windows للمرفق".into())}
+  Ok(())
+ }
+ #[cfg(not(windows))]{
+  let _=path;Err("الطباعة متاحة في Windows فقط".into())
+ }
+}
 #[derive(Deserialize)]
 pub struct OutgoingAttachment {name:String,mime:String,data:String}
 #[derive(Serialize)]
