@@ -425,7 +425,10 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
   // Verify this part belongs to the message before downloading.
   let message=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
   let mut known=Vec::new();gmail_attachment_parts(&message["payload"],&mut known);
-  if !known.iter().any(|a|a.part_id==part_id&&a.name==name){return Err("المرفق لا ينتمي للرسالة".into())}
+  // The attachment ID is the authoritative link; UI-provided filenames can differ after MIME decoding.
+  // Resolve the filename from the freshly fetched message instead of trusting the UI.
+  let verified=known.iter().find(|a|a.part_id==part_id).ok_or("المرفق لا ينتمي للرسالة")?;
+  let verified_name=verified.name.clone();
   let inline_data;
   let encoded=if let Some(inline_part)=part_id.strip_prefix("inline:"){
    inline_data=gmail_find_inline(&message["payload"],inline_part).ok_or("تعذر العثور على بيانات المرفق الداخلي")?.to_string();
@@ -440,7 +443,7 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
   if bytes.len()>25*1024*1024{return Err("المرفق أكبر من الحد المسموح 25MB".into())}
   let dir=app.path().document_dir().map_err(|e|e.to_string())?.join("EcoleArchive").join("Gmail");
   fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
-  let filename=safe_filename(&name);
+  let filename=safe_filename(&verified_name);
   let path=(0..1000).map(|i|if i==0{dir.join(&filename)}else{dir.join(format!("{i}-{filename}"))})
    .find(|p|!p.exists()).ok_or("تعذر تخصيص اسم للمرفق")?;
   fs::write(&path,bytes).map_err(|e|e.to_string())?;
