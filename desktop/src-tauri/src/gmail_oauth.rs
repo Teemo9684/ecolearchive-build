@@ -367,7 +367,7 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
 fn mime_safe(s:&str)->String{s.chars().filter(|c|c.is_ascii_alphanumeric()||"/.+-".contains(*c)).take(80).collect()}
 fn mail_header(s:&str)->String{s.chars().filter(|c|*c!='\r'&&*c!='\n'&& !c.is_control()).collect()}
 #[tauri::command]
-pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>)->Result<String,String>{
+pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>,thread_id:Option<String>,in_reply_to:Option<String>)->Result<String,String>{
  let recipient=mail_header(to.trim());
  if recipient.is_empty()||recipient.len()>320||!recipient.contains('@')||recipient.contains(' '){return Err("عنوان المرسل إليه غير صالح".into())}
  if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم الرسالة أو عدد المرفقات تجاوز الحد".into())}
@@ -375,7 +375,13 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   let boundary=format!("ecolearchive-{}",rand::random::<u64>());
   let encoded_subject=if subject.is_ascii(){mail_header(&subject)}else{format!("=?UTF-8?B?{}?=",base64::engine::general_purpose::STANDARD.encode(subject.as_bytes()))};
-  let mut msg=format!("To: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");
+  let mut msg=format!("To: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");  if let Some(ref message_id)=in_reply_to{
+   let value=mail_header(message_id);
+   if !value.is_empty()&&value.len()<300{
+    msg.push_str(&format!("In-Reply-To: {value}\r\nReferences: {value}\r\n"));
+   }
+  }
+
   if attachments.is_empty(){
    msg.push_str("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
    msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
@@ -394,7 +400,10 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
   }
   let raw=URL_SAFE_NO_PAD.encode(msg.as_bytes());
   let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send").bearer_auth(&token)
-    .json(&serde_json::json!({"raw":raw})).send().map_err(|e|format!("فشل اتصال إرسال Gmail: {}",network_error_kind(&e)))?;
+    .json(&match thread_id.filter(|id|safe_message_id(id)){
+     Some(id)=>serde_json::json!({"raw":raw,"threadId":id}),
+     None=>serde_json::json!({"raw":raw})
+    }).send().map_err(|e|format!("فشل اتصال إرسال Gmail: {}",network_error_kind(&e)))?;
   if !response.status().is_success(){return Err(format!("رفض Gmail إرسال الرسالة (HTTP {})",response.status()))}
   let result:serde_json::Value=response.json().map_err(|_|"رد Gmail بعد الإرسال غير صالح")?;
   result["id"].as_str().map(str::to_owned).ok_or("لم يؤكد Gmail معرّف الرسالة المرسلة".into())
