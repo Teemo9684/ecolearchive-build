@@ -24,13 +24,37 @@ function EmailCenter() {
   const [to,setTo]=useState("");
   const [subject,setSubject]=useState("");
   const [body,setBody]=useState("");
+  const [files,setFiles]=useState<{name:string;mime:string;data:string}[]>([]);
+  const [sending,setSending]=useState(false);
+  const [downloadList,setDownloadList]=useState<{part_id:string;name:string;mime:string;size:number}[]>([]);
+  const [downloading,setDownloading]=useState("");
 
-  const draft=()=>{
-    if(to.trim()||subject.trim()||body.trim()){
 
-      toast.info("لا يمكن إرسال الرسالة قبل ربط حساب Gmail؛ احتفظ بنصها خارج البرنامج إلى حين تفعيل الاتصال");
+  const draft=()=>setCompose(false);
+  const addFiles=async(input:FileList|null)=>{
+    if(!input)return;
+    for(const file of Array.from(input)){
+      if(file.size>15*1024*1024){toast.error("المرفق أكبر من 15MB: "+file.name);continue;}
+      const data=await new Promise<string>((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");
+        reader.onerror=()=>reject(new Error("تعذر قراءة الملف"));
+        reader.readAsDataURL(file);
+      });
+      setFiles(prev=>prev.length>=10?prev:[...prev,{name:file.name,mime:file.type||"application/octet-stream",data}]);
     }
-    setCompose(false);
+  };
+  const sendMail=async()=>{
+    if(!gmailEmail||sending)return;
+    if(!to.trim()||!to.includes("@")){toast.error("تحقق من البريد الإلكتروني للمرسل إليه");return;}
+    setSending(true);
+    try{
+      await invoke<string>("gmail_send_message",{to,subject,body,attachments:files});
+      toast.success("تم إرسال الرسالة عبر Gmail");
+      setCompose(false);setTo("");setSubject("");setBody("");setFiles([]);
+      if(folder==="SENT")await refreshMessages();
+    }catch(e){toast.error("فشل الإرسال: "+String(e));}
+    finally{setSending(false);}
   };
   const [accountMenu,setAccountMenu]=useState(false);
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
@@ -56,10 +80,25 @@ function EmailCenter() {
     return ()=>{active=false;};
   },[gmailEmail,folder]);
   const readMessage=async(item:GmailItem)=>{
-    setSelected(item);setMessageBody("");setReading(true);
-    try{setMessageBody(await invoke<string>("gmail_read_message",{id:item.id}));}
+    setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
+    try{
+      const [text,attachments]=await Promise.all([
+        invoke<string>("gmail_read_message",{id:item.id}),
+        invoke<{part_id:string;name:string;mime:string;size:number}[]>("gmail_message_attachments",{id:item.id})
+      ]);
+      setMessageBody(text);setDownloadList(attachments);
+    }
     catch(e){setMessageBody("تعذر فتح الرسالة: "+String(e));}
     finally{setReading(false);}
+  };
+  const downloadAttachment=async(part:{part_id:string;name:string})=>{
+    if(!selected)return;
+    setDownloading(part.part_id);
+    try{
+      const path=await invoke<string>("gmail_download_attachment",{id:selected.id,partId:part.part_id,name:part.name});
+      toast.success("تم حفظ المرفق: "+path);
+    }catch(e){toast.error("تعذر تنزيل المرفق: "+String(e));}
+    finally{setDownloading("");}
   };
   const refreshMessages=async()=>{
     if(!gmailEmail)return;
@@ -95,7 +134,7 @@ function EmailCenter() {
     {accountMenu&&<div className="panel space-y-3 p-4"><h2 className="font-bold">إدارة حسابات البريد</h2><p className="text-sm text-muted-foreground">{gmailEmail?`الحساب المرتبط: ${gmailEmail}`:"لا يوجد حساب متصل حاليًا."} لا نخزن كلمات المرور داخل البرنامج.</p><button onClick={()=>{setAccountMenu(false);void connectGmail();}} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">إضافة حساب جديد</button><button disabled={!gmailEmail||connecting} onClick={()=>void signOut()} className="mr-2 inline-flex items-center gap-2 rounded-lg border px-4 py-2 disabled:opacity-50"><LogOut className="h-4 w-4"/> تسجيل الخروج</button></div>}
     <div className="panel flex items-start gap-2 border-amber-300 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0"/>
-      <div className="text-sm"><strong>{gmailEmail?`متصل بحساب ${gmailEmail}`:"Gmail غير متصل بعد."}</strong> {gmailEmail?"يتم تحميل البريد مباشرة من Gmail. إرسال الرسائل والمرفقات لم يُفعّل بعد.":"اضغط «إضافة حساب»، ووافق عبر صفحة Google الرسمية. لن يطلب البرنامج كلمة مرورك."}</div>
+      <div className="text-sm"><strong>{gmailEmail?`متصل بحساب ${gmailEmail}`:"Gmail غير متصل بعد."}</strong> {gmailEmail?"يتم تحميل الرسائل مباشرة من Gmail، ويمكن إرسال بريد وتنزيل المرفقات.":"اضغط «إضافة حساب»، ووافق عبر صفحة Google الرسمية. لن يطلب البرنامج كلمة مرورك."}</div>
     </div>
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
@@ -127,7 +166,8 @@ function EmailCenter() {
             <div className="flex items-center justify-between gap-3"><h2 className="font-bold">{selected.subject||"(بدون موضوع)"}</h2><button title="إغلاق" onClick={()=>setSelected(null)}><X/></button></div>
             <p className="text-sm text-muted-foreground">{selected.sender}</p>
             <p className="text-xs text-muted-foreground" dir="ltr">{selected.date}</p>
-            {selected.has_attachments&&<p className="text-xs text-muted-foreground">الرسالة تحتوي على مرفقات؛ تنزيلها لم يُفعّل بعد.</p>}
+            {selected.has_attachments&&<p className="text-xs text-muted-foreground">الرسالة تحتوي على مرفقات.</p>}
+            {downloadList.map(a=><button key={a.part_id} disabled={!!downloading} className="flex w-full items-center gap-2 rounded-lg border p-2 text-right text-sm" onClick={()=>void downloadAttachment(a)}><Paperclip className="h-4 w-4"/>{a.name} — {Math.round(a.size/1024)} KB {downloading===a.part_id?"(جارٍ التنزيل…)":"(تنزيل)"}</button>)}
             <div className="whitespace-pre-wrap break-words border-t pt-4 text-sm" dir="auto">{reading?"جارٍ فتح الرسالة…":messageBody}</div>
           </div>
         </div>}
@@ -139,8 +179,9 @@ function EmailCenter() {
         <label className="block text-sm">إلى<input className="field-select mt-1 w-full" type="email" value={to} onChange={e=>setTo(e.target.value)}/></label>
         <label className="block text-sm">الموضوع<input className="field-select mt-1 w-full" value={subject} onChange={e=>setSubject(e.target.value)}/></label>
         <label className="block text-sm">الرسالة<textarea className="field-select mt-1 min-h-48 w-full" value={body} onChange={e=>setBody(e.target.value)}/></label>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground"><AlertCircle className="h-4 w-4"/> إرسال الرسائل والمرفقات يتطلب ربط Gmail أولًا.</div>
-        <div className="flex justify-end gap-2"><button onClick={draft} className="rounded-lg border px-4 py-2">إغلاق</button><button disabled title="اربط Gmail أولًا" className="rounded-lg bg-primary px-5 py-2 text-primary-foreground opacity-50"><Send className="inline h-4 w-4"/> إرسال</button></div>
+        <label className="block text-sm">إرفاق ملفات (حتى 10 ملفات، 15MB للملف الواحد)<input type="file" multiple className="mt-2 block w-full text-sm" onChange={e=>void addFiles(e.target.files)}/></label>
+        {files.map((a,i)=><div key={i} className="flex items-center justify-between rounded-lg border p-2 text-sm"><span>{a.name}</span><button onClick={()=>setFiles(v=>v.filter((_,j)=>j!==i))} title="حذف المرفق"><X className="h-4 w-4"/></button></div>)}
+        <div className="flex justify-end gap-2"><button onClick={draft} className="rounded-lg border px-4 py-2">إغلاق</button><button disabled={!gmailEmail||sending} onClick={()=>void sendMail()} className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50"><Send className="inline h-4 w-4"/> {sending?"جارٍ الإرسال…":"إرسال"}</button></div>
       </div>
     </div>}
   </section>;
