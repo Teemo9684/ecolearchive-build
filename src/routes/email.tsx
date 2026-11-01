@@ -127,6 +127,13 @@ export function EmailCenter() {
   const [lastSynced,setLastSynced]=useState<string|null>(null);
   const inboxIdsRef=useRef<Set<string>|null>(null);
   const newInboxIdsRef=useRef<Set<string>>(new Set());
+  const inboxCheckpointRef=useRef<number|null>(null);
+  const inboxRestoredRef=useRef<string|null>(null);
+  const saveInboxAlerts=()=>{
+    if(!gmailEmail)return;
+    try{localStorage.setItem("ecolearchive:gmail-new:"+gmailEmail.toLowerCase(),
+      JSON.stringify({checkedAt:inboxCheckpointRef.current,ids:[...newInboxIdsRef.current]}));}catch{}
+  };
   const syncInFlightRef=useRef(false);
   const folderRef=useRef(folder);
   const queryRef=useRef(activeQuery);
@@ -178,6 +185,8 @@ export function EmailCenter() {
   useEffect(()=>{
     inboxIdsRef.current=null;
     newInboxIdsRef.current.clear();
+    inboxCheckpointRef.current=null;
+    inboxRestoredRef.current=null;
     setUnreadCount(0);
     setGmailUnreadCount(0);
     setLastSynced(null);
@@ -194,11 +203,28 @@ export function EmailCenter() {
         const arrived=previous?snapshot.ids.filter(id=>!previous.has(id)):[];
         inboxIdsRef.current=newIds;
         setUnreadCount(snapshot.unread_count);
-        // First successful poll is the baseline: thousands of older unread
-        // messages must not be presented as newly arrived notifications.
-        for(const id of arrived)newInboxIdsRef.current.add(id);
-        // Keep alerts only for messages still in the inbox.
-        for(const id of newInboxIdsRef.current)if(!newIds.has(id))newInboxIdsRef.current.delete(id);
+        if(inboxRestoredRef.current!==gmailEmail){
+          inboxRestoredRef.current=gmailEmail;
+          try{
+            const saved=JSON.parse(localStorage.getItem("ecolearchive:gmail-new:"+gmailEmail.toLowerCase())||"null");
+            if(saved&&Number.isSafeInteger(saved.checkedAt)&&saved.checkedAt>0&&saved.checkedAt<=Date.now()){
+              inboxCheckpointRef.current=saved.checkedAt;
+              newInboxIdsRef.current=new Set(Array.isArray(saved.ids)?saved.ids.filter((id:unknown)=>typeof id==="string"&&/^[a-zA-Z0-9_-]{1,128}$/.test(id)).slice(0,3000):[]);
+            }
+          }catch{}
+        }
+        const initialCheckpoint=inboxCheckpointRef.current;
+        if(initialCheckpoint!==null&&previous===null){
+          // Catch up across app restarts, not just the most recent 30 messages.
+          const missed=await invoke<string[]>("gmail_inbox_arrivals_since",{since:Math.floor(initialCheckpoint/1000)});
+          if(!active)return;
+          for(const id of missed)newInboxIdsRef.current.add(id);
+        }else{
+          for(const id of arrived)newInboxIdsRef.current.add(id);
+        }
+        // Never erase old pending alerts merely because they are outside the first page.
+        inboxCheckpointRef.current=Date.now();
+        saveInboxAlerts();
         setGmailUnreadCount(newInboxIdsRef.current.size);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
         // Inbox always has priority: poll IDs every 5 seconds and refresh its list
@@ -227,7 +253,7 @@ export function EmailCenter() {
     return ()=>{active=false;window.clearInterval(timer);window.removeEventListener("online",onResume);document.removeEventListener("visibilitychange",onResume);};
   },[gmailEmail,autoSync]);
   const readMessage=async(item:GmailItem)=>{
-    if(newInboxIdsRef.current.delete(item.id))setGmailUnreadCount(newInboxIdsRef.current.size);
+    if(newInboxIdsRef.current.delete(item.id)){setGmailUnreadCount(newInboxIdsRef.current.size);saveInboxAlerts();}
     setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
       const [text,attachments]=await Promise.all([
@@ -316,7 +342,7 @@ export function EmailCenter() {
   };
   const signOut=async()=>{
     if(!isDesktopRuntime())return;
-    try{await window.__TAURI_INTERNALS__!.invoke("gmail_sign_out");setGmailEmail(null);setGmailUnreadCount(0);setMessages([]);setSelected(null);toast.success("تم فصل Gmail من البرنامج");}
+    try{await window.__TAURI_INTERNALS__!.invoke("gmail_sign_out");setGmailEmail(null);setGmailUnreadCount(0);newInboxIdsRef.current.clear();setMessages([]);setSelected(null);toast.success("تم فصل Gmail من البرنامج");}
     catch(e){toast.error(String(e));}
   };
   return <section className="space-y-5" dir="rtl">
