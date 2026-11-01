@@ -9,6 +9,7 @@ import { toast } from "sonner";
  * Never ship the Lovable cloud gateway keys or request a Google account password.
  */
 export const Route = createFileRoute("/email")({ component: EmailCenter });
+type GmailPage = {items:GmailItem[];next_page_token:string|null};
 type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string;draft_id?:string|null};
 type Folder = "INBOX" | "STARRED" | "SENT" | "TRASH" | "DRAFTS";
 const folders: {id:Folder;label:string;icon:typeof Inbox}[] = [
@@ -21,6 +22,10 @@ const folders: {id:Folder;label:string;icon:typeof Inbox}[] = [
 function EmailCenter() {
   const [folder,setFolder]=useState<Folder>("INBOX");
   const [search,setSearch]=useState("");
+  const [activeQuery,setActiveQuery]=useState("");
+  const [nextPageToken,setNextPageToken]=useState<string|null>(null);
+  const [loadingMore,setLoadingMore]=useState(false);
+
   const [compose,setCompose]=useState(false);
   const [to,setTo]=useState("");
   const [subject,setSubject]=useState("");
@@ -84,14 +89,17 @@ function EmailCenter() {
   const readClientId=()=>settings.gmailClientId?.trim()||"";
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   useEffect(()=>{
-    if(!gmailEmail||!isDesktopRuntime()){setMessages([]);setSelected(null);setMailError("");return;}
+    if(!gmailEmail||!isDesktopRuntime()){setMessages([]);setSelected(null);setMailError("");setNextPageToken(null);return;}
     let active=true;
-    setLoadingMessages(true);setMailError("");setSelected(null);
-    void invoke<GmailItem[]>("gmail_list_messages",{folder}).then(items=>{if(active)setMessages(items);})
+    setLoadingMessages(true);setMailError("");setSelected(null);setNextPageToken(null);
+    const promise=folder==="DRAFTS"
+      ?invoke<GmailItem[]>("gmail_list_messages",{folder}).then(items=>({items,next_page_token:null} as GmailPage))
+      :invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:null});
+    void promise.then(page=>{if(active){setMessages(page.items);setNextPageToken(page.next_page_token);}})
       .catch(e=>{if(active){setMessages([]);setMailError(String(e));toast.error("تعذر تحميل البريد: "+String(e));}})
       .finally(()=>{if(active)setLoadingMessages(false);});
     return ()=>{active=false;};
-  },[gmailEmail,folder]);
+  },[gmailEmail,folder,activeQuery]);
   const readMessage=async(item:GmailItem)=>{
     setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
@@ -149,9 +157,24 @@ function EmailCenter() {
   const refreshMessages=async()=>{
     if(!gmailEmail)return;
     setLoadingMessages(true);setMailError("");
-    try{setMessages(await invoke<GmailItem[]>("gmail_list_messages",{folder}));}
-    catch(e){setMailError(String(e));toast.error(String(e));}
+    try{
+      if(folder==="DRAFTS"){setMessages(await invoke<GmailItem[]>("gmail_list_messages",{folder}));setNextPageToken(null);}
+      else{
+        const page=await invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:null});
+        setMessages(page.items);setNextPageToken(page.next_page_token);
+      }
+    }catch(e){setMailError(String(e));toast.error(String(e));}
     finally{setLoadingMessages(false);}
+  };
+  const loadMore=async()=>{
+    if(!gmailEmail||!nextPageToken||loadingMore||folder==="DRAFTS")return;
+    setLoadingMore(true);
+    try{
+      const page=await invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:nextPageToken});
+      setMessages(prev=>[...prev,...page.items.filter(item=>!prev.some(old=>old.id===item.id))]);
+      setNextPageToken(page.next_page_token);
+    }catch(e){toast.error("تعذر تحميل بقية الرسائل: "+String(e));}
+    finally{setLoadingMore(false);}
   };
   const connectGmail=async()=>{
     if(!isDesktopRuntime()){toast.error("تسجيل الدخول يعمل فقط في نسخة Windows");return;}
@@ -190,7 +213,8 @@ function EmailCenter() {
       <div className="panel min-h-[430px] overflow-hidden">
         <div className="flex items-center gap-2 border-b p-4">
           <Search className="h-5 w-5 text-muted-foreground"/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-transparent outline-none" placeholder="البحث في Gmail" aria-label="البحث في Gmail" />
+          <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setActiveQuery(search);}} className="w-full bg-transparent outline-none" placeholder="البحث في Gmail" aria-label="البحث في Gmail" />
+          <button onClick={()=>setActiveQuery(search)} className="rounded-lg border px-3 py-1 text-sm">بحث</button>
         </div>
 
         <div className="flex items-center justify-between border-b px-4 py-2 text-sm">
@@ -199,7 +223,7 @@ function EmailCenter() {
         </div>
         {mailError&&<p className="m-3 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{mailError}</p>}
         {gmailEmail&&messages.length>0?<div className="divide-y">
-          {messages.filter(m=>[m.sender,m.subject,m.snippet].some(v=>v.toLowerCase().includes(search.toLowerCase()))).map(m=><button key={m.id} onClick={()=>void readMessage(m)} className={"w-full px-4 py-3 text-right hover:bg-muted/60 "+(m.unread?"font-bold":"")}>
+          {messages.filter(m=>folder==="DRAFTS"?[m.sender,m.subject,m.snippet].some(v=>v.toLowerCase().includes(search.toLowerCase())):true).map(m=><button key={m.id} onClick={()=>void readMessage(m)} className={"w-full px-4 py-3 text-right hover:bg-muted/60 "+(m.unread?"font-bold":"")}>
             <div className="flex items-center justify-between gap-3"><span className="min-w-0 truncate">{m.sender||"مرسل غير معروف"}</span><span className="shrink-0 text-xs font-normal text-muted-foreground" dir="ltr">{m.date}</span></div>
             <div className="mt-1 flex items-center gap-2"><span className="truncate">{m.subject||"(بدون موضوع)"}</span>{m.has_attachments&&<Paperclip className="h-4 w-4 shrink-0"/>}</div>
             <p className="mt-1 truncate text-xs font-normal text-muted-foreground">{m.snippet}</p>
@@ -207,6 +231,7 @@ function EmailCenter() {
         </div>:<div className="flex min-h-[270px] flex-col items-center justify-center gap-3 px-5 text-center text-muted-foreground">
           <Inbox className="h-10 w-10"/><p>{loadingMessages?"جارٍ جلب رسائل Gmail…":gmailEmail?"لا توجد رسائل في هذا المجلد.":"اضغط «إضافة حساب» للبدء."}</p>
         </div>}
+        {gmailEmail&&nextPageToken&&folder!=="DRAFTS"&&<div className="flex justify-center p-3"><button disabled={loadingMore} onClick={()=>void loadMore()} className="rounded-lg border px-5 py-2 text-sm">{loadingMore?"جارٍ التحميل…":"تحميل رسائل أقدم"}</button></div>}
         {selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="قراءة رسالة Gmail">
           <div className="panel max-h-[85vh] w-full max-w-3xl overflow-auto space-y-3 p-5">
             <div className="flex items-center justify-between gap-3"><h2 className="font-bold">{selected.subject||"(بدون موضوع)"}</h2><button title="إغلاق" onClick={()=>setSelected(null)}><X/></button></div>
