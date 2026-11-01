@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { isDesktopRuntime } from "@/lib/db/desktop";
 import { useSettings } from "@/lib/db/hooks";
-import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
+import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { setGmailUnreadCount } from "@/lib/gmail-unread";
 
@@ -41,7 +41,10 @@ export function EmailCenter() {
   const [downloading,setDownloading]=useState("");
   const [previewLoading,setPreviewLoading]=useState(false);
   const [attachmentPreview,setAttachmentPreview]=useState<{part:{part_id:string;name:string};mime:string;url:string}|null>(null);
-  const previewFrameRef=useRef<HTMLIFrameElement|null>(null);
+  const previewCacheRef=useRef<Map<string,{mime:string;url:string;data:string}>>(new Map());
+  const previewRequestRef=useRef(0);
+  const previewable=downloadList.filter(a=>["image/jpeg","image/png","image/gif","image/webp","application/pdf"].includes(a.mime.toLowerCase()));
+  const previewIndex=attachmentPreview?previewable.findIndex(a=>a.part_id===attachmentPreview.part.part_id):-1;
 
 
   const draft=()=>setCompose(false);
@@ -244,7 +247,7 @@ export function EmailCenter() {
   },[gmailEmail,autoSync]);
   const readMessage=async(item:GmailItem)=>{
     if(newInboxIdsRef.current.delete(item.id)){setGmailUnreadCount(newInboxIdsRef.current.size);saveInboxAlerts();}
-    setAttachmentPreview(null);setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
+    previewRequestRef.current++;setAttachmentPreview(null);setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
       const [text,attachments]=await Promise.all([
         invoke<string>("gmail_read_message",{id:item.id}),
@@ -257,32 +260,39 @@ export function EmailCenter() {
   };
   const openAttachment=async(part:{part_id:string;name:string;mime:string})=>{
     if(!selected)return;
-    const mime=part.mime.toLowerCase();
-    if(!["image/jpeg","image/png","image/gif","image/webp","application/pdf"].includes(mime)){
-      toast.info("هذا النوع لا يدعم المعاينة. يمكن تنزيله.");
-      return;
+    if(!["image/jpeg","image/png","image/gif","image/webp","application/pdf"].includes(part.mime.toLowerCase())){
+      toast.info("هذا النوع لا يدعم المعاينة. يمكن تنزيله.");return;
     }
+    const request=++previewRequestRef.current;
+    const cacheKey=selected.id+":"+part.part_id;
+    const cached=previewCacheRef.current.get(cacheKey);
+    if(cached){setAttachmentPreview({part,mime:cached.mime,url:cached.url});setPreviewLoading(false);return;}
     setPreviewLoading(true);
     try{
       const file=await invoke<{mime:string;data:string}>("gmail_preview_attachment",{id:selected.id,partId:part.part_id});
-      setAttachmentPreview({part,mime:file.mime,url:"data:"+file.mime+";base64,"+file.data});
-    }catch(e){toast.error("تعذر عرض المرفق: "+String(e));}
-    finally{setPreviewLoading(false);}
+      const value={mime:file.mime,data:file.data,url:"data:"+file.mime+";base64,"+file.data};
+      // Keep only a small in-memory LRU-like cache to avoid re-fetching when moving back.
+      if(previewCacheRef.current.size>=8)previewCacheRef.current.delete(previewCacheRef.current.keys().next().value!);
+      previewCacheRef.current.set(cacheKey,value);
+      if(request===previewRequestRef.current)setAttachmentPreview({part,mime:value.mime,url:value.url});
+    }catch(e){if(request===previewRequestRef.current)toast.error("تعذر عرض المرفق: "+String(e));}
+    finally{if(request===previewRequestRef.current)setPreviewLoading(false);}
   };
-  const printAttachment=()=>{
-    if(!attachmentPreview)return;
-    if(attachmentPreview.mime==="application/pdf"){previewFrameRef.current?.contentWindow?.print();return;}
-    const img=new Image();
-    img.onload=()=>{
-      const windowPrint=window.open("","_blank");
-      if(!windowPrint){toast.error("تعذر فتح نافذة الطباعة");return;}
-      windowPrint.document.title=attachmentPreview.part.name;
-      const image=windowPrint.document.createElement("img");
-      image.src=attachmentPreview.url;image.style.maxWidth="100%";
-      image.onload=()=>{windowPrint.focus();windowPrint.print();};
-      windowPrint.document.body.appendChild(image);
-    };
-    img.src=attachmentPreview.url;
+  const movePreview=(offset:number)=>{
+    if(!previewable.length||previewIndex<0)return;
+    const next=previewable[(previewIndex+offset+previewable.length)%previewable.length];
+    if(next)void openAttachment(next);
+  };
+  const printAttachment=async()=>{
+    if(!attachmentPreview||!selected)return;
+    try{
+      const cached=previewCacheRef.current.get(selected.id+":"+attachmentPreview.part.part_id);
+      if(!cached)throw Error("بيانات المرفق غير متاحة");
+      await invoke<void>("gmail_open_attachment_for_print",{
+        name:attachmentPreview.part.name,mime:cached.mime,data:cached.data
+      });
+      toast.info("تم فتح المرفق في عارض Windows. استعمل Ctrl+P للطباعة.");
+    }catch(e){toast.error("تعذر فتح المرفق للطباعة: "+String(e));}
   };
   const downloadAttachment=async(part:{part_id:string;name:string})=>{
     if(!selected)return;
@@ -437,10 +447,15 @@ export function EmailCenter() {
     </div>
     {attachmentPreview&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label="معاينة المرفق">
       <div className="panel flex h-[90vh] w-full max-w-5xl flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="truncate">{attachmentPreview.part.name}</strong><div className="flex gap-2"><button className="rounded-lg border px-3 py-2" onClick={()=>void downloadAttachment(attachmentPreview.part)}>تحميل</button><button className="rounded-lg border px-3 py-2" onClick={printAttachment}>طباعة</button><button className="rounded-lg border px-3 py-2" onClick={()=>setAttachmentPreview(null)}>إغلاق</button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="truncate">{attachmentPreview.part.name} {previewable.length>1&&<span className="text-sm font-normal text-muted-foreground">({previewIndex+1} / {previewable.length})</span>}</strong><div className="flex gap-2"><button className="rounded-lg border px-3 py-2" onClick={()=>void downloadAttachment(attachmentPreview.part)}>تحميل</button><button className="rounded-lg border px-3 py-2" onClick={printAttachment}>طباعة</button><button className="rounded-lg border px-3 py-2" onClick={()=>{previewRequestRef.current++;setAttachmentPreview(null);}}>إغلاق</button></div></div>
+        <div className="relative flex min-h-0 flex-1 items-stretch gap-2">
+        {previewable.length>1&&<button className="z-10 self-center rounded-full border bg-background/90 p-2" onClick={()=>movePreview(-1)} aria-label="المرفق السابق"><ChevronRight/></button>}
         {attachmentPreview.mime==="application/pdf"
-          ?<iframe ref={previewFrameRef} title="معاينة PDF" src={attachmentPreview.url} className="min-h-0 w-full flex-1 rounded-lg bg-white"/>
+          ?<iframe title="معاينة PDF" src={attachmentPreview.url} className="min-h-0 w-full flex-1 rounded-lg bg-white"/>
           :<div className="flex min-h-0 flex-1 items-center justify-center overflow-auto"><img alt={attachmentPreview.part.name} src={attachmentPreview.url} className="max-h-full max-w-full object-contain"/></div>}
+        {previewable.length>1&&<button className="z-10 self-center rounded-full border bg-background/90 p-2" onClick={()=>movePreview(1)} aria-label="المرفق التالي"><ChevronLeft/></button>}
+        {previewLoading&&<span className="absolute inset-0 flex items-center justify-center bg-background/70 text-sm">جارٍ تحميل المرفق…</span>}
+        </div>
       </div>
     </div>}
     {compose&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="رسالة جديدة">
