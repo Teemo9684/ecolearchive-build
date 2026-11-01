@@ -39,6 +39,9 @@ export function EmailCenter() {
   const [replyThread,setReplyThread]=useState<{threadId:string;messageId:string}|null>(null);
   const [downloadList,setDownloadList]=useState<{part_id:string;name:string;mime:string;size:number}[]>([]);
   const [downloading,setDownloading]=useState("");
+  const [previewLoading,setPreviewLoading]=useState(false);
+  const [attachmentPreview,setAttachmentPreview]=useState<{part:{part_id:string;name:string};mime:string;url:string}|null>(null);
+  const previewFrameRef=useRef<HTMLIFrameElement|null>(null);
 
 
   const draft=()=>setCompose(false);
@@ -254,7 +257,7 @@ export function EmailCenter() {
   },[gmailEmail,autoSync]);
   const readMessage=async(item:GmailItem)=>{
     if(newInboxIdsRef.current.delete(item.id)){setGmailUnreadCount(newInboxIdsRef.current.size);saveInboxAlerts();}
-    setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
+    setAttachmentPreview(null);setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
       const [text,attachments]=await Promise.all([
         invoke<string>("gmail_read_message",{id:item.id}),
@@ -264,6 +267,35 @@ export function EmailCenter() {
     }
     catch(e){setMessageBody("تعذر فتح الرسالة: "+String(e));}
     finally{setReading(false);}
+  };
+  const openAttachment=async(part:{part_id:string;name:string;mime:string})=>{
+    if(!selected)return;
+    const mime=part.mime.toLowerCase();
+    if(!["image/jpeg","image/png","image/gif","image/webp","application/pdf"].includes(mime)){
+      toast.info("هذا النوع لا يدعم المعاينة. يمكن تنزيله.");
+      return;
+    }
+    setPreviewLoading(true);
+    try{
+      const file=await invoke<{mime:string;data:string}>("gmail_preview_attachment",{id:selected.id,partId:part.part_id});
+      setAttachmentPreview({part,mime:file.mime,url:"data:"+file.mime+";base64,"+file.data});
+    }catch(e){toast.error("تعذر عرض المرفق: "+String(e));}
+    finally{setPreviewLoading(false);}
+  };
+  const printAttachment=()=>{
+    if(!attachmentPreview)return;
+    if(attachmentPreview.mime==="application/pdf"){previewFrameRef.current?.contentWindow?.print();return;}
+    const img=new Image();
+    img.onload=()=>{
+      const windowPrint=window.open("","_blank");
+      if(!windowPrint){toast.error("تعذر فتح نافذة الطباعة");return;}
+      windowPrint.document.title=attachmentPreview.part.name;
+      const image=windowPrint.document.createElement("img");
+      image.src=attachmentPreview.url;image.style.maxWidth="100%";
+      image.onload=()=>{windowPrint.focus();windowPrint.print();};
+      windowPrint.document.body.appendChild(image);
+    };
+    img.src=attachmentPreview.url;
   };
   const downloadAttachment=async(part:{part_id:string;name:string})=>{
     if(!selected)return;
@@ -398,7 +430,7 @@ export function EmailCenter() {
             <p className="text-sm text-muted-foreground">{selected.sender}</p>
             <p className="text-xs text-muted-foreground" dir="ltr">{selected.date}</p>
             {selected.has_attachments&&<p className="text-xs text-muted-foreground">الرسالة تحتوي على مرفقات.</p>}
-            {downloadList.map(a=><button key={a.part_id} disabled={!!downloading} className="flex w-full items-center gap-2 rounded-lg border p-2 text-right text-sm" onClick={()=>void downloadAttachment(a)}><Paperclip className="h-4 w-4"/>{a.name} — {Math.round(a.size/1024)} KB {downloading===a.part_id?"(جارٍ التنزيل…)":"(تنزيل)"}</button>)}
+            {downloadList.map(a=><div key={a.part_id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"><button disabled={previewLoading} className="flex min-w-0 items-center gap-2 text-right hover:underline" onClick={()=>void openAttachment(a)}><Paperclip className="h-4 w-4 shrink-0"/><span className="truncate">{a.name}</span><span className="shrink-0 text-xs text-muted-foreground">{Math.round(a.size/1024)} KB</span></button><button disabled={!!downloading} onClick={()=>void downloadAttachment(a)} className="shrink-0 rounded-lg border px-3 py-1.5">تحميل</button></div>)}
             {selected.draft_id?<div className="flex flex-wrap gap-2 border-t pt-3 text-sm">
               <button disabled={sending} onClick={()=>void draftAction("SEND")} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground">إرسال المسودة</button>
               <button disabled={sending} onClick={()=>void draftAction("DELETE")} className="rounded-lg border px-3 py-2">حذف المسودة</button>
@@ -416,6 +448,14 @@ export function EmailCenter() {
         </div>}
       </div>
     </div>
+    {attachmentPreview&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label="معاينة المرفق">
+      <div className="panel flex h-[90vh] w-full max-w-5xl flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="truncate">{attachmentPreview.part.name}</strong><div className="flex gap-2"><button className="rounded-lg border px-3 py-2" onClick={()=>void downloadAttachment(attachmentPreview.part)}>تحميل</button><button className="rounded-lg border px-3 py-2" onClick={printAttachment}>طباعة</button><button className="rounded-lg border px-3 py-2" onClick={()=>setAttachmentPreview(null)}>إغلاق</button></div></div>
+        {attachmentPreview.mime==="application/pdf"
+          ?<iframe ref={previewFrameRef} title="معاينة PDF" src={attachmentPreview.url} className="min-h-0 w-full flex-1 rounded-lg bg-white"/>
+          :<div className="flex min-h-0 flex-1 items-center justify-center overflow-auto"><img alt={attachmentPreview.part.name} src={attachmentPreview.url} className="max-h-full max-w-full object-contain"/></div>}
+      </div>
+    </div>}
     {compose&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="رسالة جديدة">
       <div className="panel w-full max-w-2xl space-y-3 p-5">
         <div className="flex items-center justify-between"><h2 className="text-lg font-bold">رسالة جديدة</h2><button title="إغلاق" onClick={draft}><X/></button></div>
