@@ -450,6 +450,43 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
   Ok(path.to_string_lossy().to_string())
  }).await.map_err(|e|e.to_string())?
 }
+// Preview only safe raster images and PDFs. Never render arbitrary HTML or SVG from email.
+#[derive(Serialize)]
+pub struct GmailAttachmentPreview {mime:String,data:String}
+#[tauri::command]
+pub async fn gmail_preview_attachment(app:tauri::AppHandle,id:String,part_id:String)->Result<GmailAttachmentPreview,String>{
+ if !safe_message_id(&id)||part_id.is_empty()||part_id.len()>4096||!part_id.bytes().all(|b|b.is_ascii_graphic()){return Err("معرّف المرفق غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let message=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
+  let mut known=Vec::new();gmail_attachment_parts(&message["payload"],&mut known);
+  let attachment=known.iter().find(|a|a.part_id==part_id).ok_or("المرفق لا ينتمي للرسالة")?;
+  let mime=attachment.mime.to_ascii_lowercase();
+  if !matches!(mime.as_str(),"image/jpeg"|"image/png"|"image/gif"|"image/webp"|"application/pdf"){
+   return Err("المعاينة غير متاحة لهذا النوع؛ يمكنك تنزيل الملف".into())
+  }
+  if attachment.size>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
+  let encoded=if let Some(inline_part)=part_id.strip_prefix("inline:"){
+   gmail_find_inline(&message["payload"],inline_part).ok_or("تعذر قراءة المرفق الداخلي")?.to_string()
+  }else{
+   let encoded_id:String=url::form_urlencoded::byte_serialize(part_id.as_bytes()).collect();
+   let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
+   data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string()
+  };
+  let bytes=URL_SAFE_NO_PAD.decode(encoded).map_err(|_|"ترميز المرفق غير صالح")?;
+  if bytes.len()>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
+  let valid=match mime.as_str(){
+   "application/pdf"=>bytes.starts_with(b"%PDF-"),
+   "image/png"=>bytes.starts_with(&[137,80,78,71,13,10,26,10]),
+   "image/jpeg"=>bytes.starts_with(&[255,216,255]),
+   "image/gif"=>bytes.starts_with(b"GIF87a")||bytes.starts_with(b"GIF89a"),
+   "image/webp"=>bytes.len()>12&&bytes.starts_with(b"RIFF")&&&bytes[8..12]==b"WEBP",
+   _=>false
+  };
+  if !valid{return Err("محتوى المرفق لا يطابق نوع الملف".into())}
+  Ok(GmailAttachmentPreview{mime,data:base64::engine::general_purpose::STANDARD.encode(&bytes)})
+ }).await.map_err(|e|e.to_string())?
+}
 fn mime_safe(s:&str)->String{s.chars().filter(|c|c.is_ascii_alphanumeric()||"/.+-".contains(*c)).take(80).collect()}
 fn mail_header(s:&str)->String{s.chars().filter(|c|*c!='\r'&&*c!='\n'&& !c.is_control()).collect()}
 fn gmail_mime_base64(bytes:&[u8])->String{
