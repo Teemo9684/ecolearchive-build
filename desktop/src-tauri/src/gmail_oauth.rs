@@ -445,7 +445,6 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
   let verified=gmail_verified_part(&message,&part_id)?;
   let verified_name=verified["filename"].as_str().unwrap_or("attachment.bin").to_string();
   let actual_id=verified["body"]["attachmentId"].as_str().map(str::to_owned);
-  let inline_part=verified["partId"].as_str().map(str::to_owned);
   let embedded=verified["body"]["data"].as_str().map(str::to_owned);
   let inline_data;
   let encoded=if let Some(data)=embedded{
