@@ -408,6 +408,11 @@
 }
 
 /* Embedded glass newsroom ticker — seamless loop, pause on hover/focus. */
+.ecole-ticker-viewport {
+  /* The headline and its book divider gently vanish into the frosted heading. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.15) 12px, #000 76px, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.15) 12px, #000 76px, #000 100%);
+}
 .ecole-ticker-track { animation: ecole-ticker-motion 22s linear infinite; }
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
