@@ -116,9 +116,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     title={collapsed ? (fr ? NAV_FR[it.to] ?? it.label : it.label) : undefined}
                     aria-label={fr ? NAV_FR[it.to] ?? it.label : it.label}
                     className={cn(
-                      "nav-soft-glow relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-[background-color,color,box-shadow] hover:bg-sidebar-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
+                      "nav-soft-glow relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-[background-color,color,box-shadow] focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
                       collapsed && "md:justify-center md:px-2",
-                      active && "bg-sidebar-accent/80 font-bold text-sidebar-foreground shadow-[inset_3px_0_0_0_#d7af67]",
+                      active
+                        ? "sidebar-nav-current bg-sidebar-accent/80 font-bold text-sidebar-foreground shadow-[inset_3px_0_0_0_#d7af67]"
+                        : "sidebar-nav-hover text-sidebar-foreground/85 hover:bg-white/[0.055] hover:text-sidebar-foreground",
                     )}
                   >
                     <it.icon className="h-5 w-5 shrink-0" />
