@@ -222,8 +222,8 @@ function Dashboard() {
           </div>
         </div>
         {/* Glass ticker is embedded inside the hero, flush with its lower edge. */}
-        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center border-t border-white/10 bg-white/[0.065] text-white shadow-[0_-3px_20px_rgba(0,0,0,.08)] backdrop-blur-2xl">
-          <div className="relative z-20 flex h-full shrink-0 items-center gap-2 bg-white/[0.035] px-3 text-xs font-semibold text-amber-200 backdrop-blur-md md:px-5">
+        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center bg-slate-950/30 text-white shadow-[0_-5px_18px_rgba(2,13,33,.15)] backdrop-blur-2xl">
+          <div className="relative z-20 flex h-full shrink-0 items-center gap-2 px-3 text-xs font-semibold text-amber-200 md:px-5">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden="true" />
             <span>آخر المستجدات</span>
           </div>
@@ -240,7 +240,7 @@ function Dashboard() {
         </div>
       </section>
 
-      <div className="relative -mt-4 space-y-5 rounded-t-3xl bg-background p-4 md:p-6 [&>*]:animate-fade-up [&>*:nth-child(2)]:[animation-delay:80ms] [&>*:nth-child(3)]:[animation-delay:160ms] [&>*:nth-child(4)]:[animation-delay:240ms]">
+      <div className="relative z-0 space-y-5 rounded-t-3xl bg-background p-4 md:p-6 [&>*]:animate-fade-up [&>*:nth-child(2)]:[animation-delay:80ms] [&>*:nth-child(3)]:[animation-delay:160ms] [&>*:nth-child(4)]:[animation-delay:240ms]">
         {/* Quick actions */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Action to="/templates" title="إنشاء وثيقة" sub="نماذج جاهزة للاستعمال" icon={FileText} tone="tone-gold" />
