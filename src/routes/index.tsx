@@ -12,6 +12,7 @@ import { Empty } from "@/components/app/bits";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence, DocumentRecord, Staff } from "@/lib/db/types";
 import hero from "@/assets/hero-school.jpg";
+import basmalaCalligraphy from "@/assets/basmala-calligraphy.svg";
 import approvedLogo from "@/assets/school-logo.png";
 import { LovableSchoolLogo } from "@/components/app/LovableSchoolLogo";
 import { cn } from "@/lib/utils";
@@ -189,7 +190,7 @@ function Dashboard() {
           </div>
           <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
             <div className="mx-auto mb-3 flex max-w-full items-center justify-center">
-              <img src="/basmala-calligraphy.svg" alt="بسم الله الرحمن الرحيم" className="h-auto w-[310px] max-w-full object-contain drop-shadow-sm md:w-[410px]" draggable={false} />
+              <img src={basmalaCalligraphy} alt="بسم الله الرحمن الرحيم" className="h-auto w-[310px] max-w-full object-contain drop-shadow-sm md:w-[410px]" draggable={false} />
             </div>
             <h1 className="text-2xl font-bold drop-shadow-lg md:text-4xl">{settings.schoolName}</h1>
             <div className="mt-1 flex items-center justify-center gap-3 text-base opacity-90 md:text-xl">
