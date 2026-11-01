@@ -222,14 +222,14 @@ function Dashboard() {
           </div>
         </div>
         {/* Glass ticker is embedded inside the hero, flush with its lower edge. */}
-        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center bg-slate-950/30 text-white shadow-[0_-5px_18px_rgba(2,13,33,.15)] backdrop-blur-2xl">
+        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center bg-white/[0.045] text-white shadow-[0_-5px_18px_rgba(2,13,33,.08)] backdrop-blur-[22px]">
           <div className="relative z-20 flex h-full shrink-0 items-center gap-2 px-3 text-xs font-semibold text-amber-200 md:px-5">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden="true" />
             <span>آخر المستجدات</span>
           </div>
-          <div className="ecole-ticker-viewport min-w-0 flex-1 overflow-hidden" aria-label="مستجدات المنظومة">
-            <div dir="ltr" className="ecole-ticker-track flex w-max items-center">
-              {[0, 1].map(copy => <div key={copy} dir="rtl" aria-hidden={copy === 1 ? true : undefined} className="flex shrink-0 items-center">
+          <div dir="rtl" className="ecole-ticker-viewport min-w-0 flex-1 overflow-hidden" aria-label="مستجدات المنظومة">
+            <div dir="rtl" className="ecole-ticker-track flex w-max items-center">
+              {[0, 1].map(copy => <div key={copy} dir="rtl" aria-hidden={copy === 1 ? true : undefined} className="flex shrink-0 flex-row items-center">
                 {tickerItems.map((item,i) => <div key={`${copy}-${i}`} className="flex shrink-0 items-center">
                   <button type="button" className="whitespace-nowrap px-4 text-xs font-medium text-slate-50 transition-colors hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300" onClick={() => item.to === "/" && availableUpdate && i===0 ? setAlertsOpen(true) : navigate({to:item.to as "/"})}>{item.text}</button>
                   <img src={bookLogo} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
