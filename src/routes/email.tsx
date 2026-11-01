@@ -4,6 +4,7 @@ import { isDesktopRuntime } from "@/lib/db/desktop";
 import { useSettings } from "@/lib/db/hooks";
 import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { setGmailUnreadCount } from "@/lib/gmail-unread";
 
 /** The Gmail UI is intentionally disconnected until desktop OAuth is configured.
  * Never ship the Lovable cloud gateway keys or request a Google account password.
@@ -176,6 +177,7 @@ export function EmailCenter() {
   useEffect(()=>{
     inboxIdsRef.current=null;
     setUnreadCount(0);
+    setGmailUnreadCount(0);
     setLastSynced(null);
     if(!gmailEmail||!isDesktopRuntime()||!autoSync)return;
     let active=true;
@@ -190,6 +192,7 @@ export function EmailCenter() {
         const arrived=previous?snapshot.ids.filter(id=>!previous.has(id)):[];
         inboxIdsRef.current=newIds;
         setUnreadCount(snapshot.unread_count);
+        setGmailUnreadCount(snapshot.unread_count);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
         // Inbox always has priority: poll IDs every 5 seconds and refresh its list
         // immediately when messages arrive. Refresh other folders less often.
@@ -305,7 +308,7 @@ export function EmailCenter() {
   };
   const signOut=async()=>{
     if(!isDesktopRuntime())return;
-    try{await window.__TAURI_INTERNALS__!.invoke("gmail_sign_out");setGmailEmail(null);setMessages([]);setSelected(null);toast.success("تم فصل Gmail من البرنامج");}
+    try{await window.__TAURI_INTERNALS__!.invoke("gmail_sign_out");setGmailEmail(null);setGmailUnreadCount(0);setMessages([]);setSelected(null);toast.success("تم فصل Gmail من البرنامج");}
     catch(e){toast.error(String(e));}
   };
   return <section className="space-y-5" dir="rtl">
