@@ -9,13 +9,14 @@ import { toast } from "sonner";
  * Never ship the Lovable cloud gateway keys or request a Google account password.
  */
 export const Route = createFileRoute("/email")({ component: EmailCenter });
-type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string};
-type Folder = "INBOX" | "STARRED" | "SENT" | "TRASH";
+type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string;draft_id?:string|null};
+type Folder = "INBOX" | "STARRED" | "SENT" | "TRASH" | "DRAFTS";
 const folders: {id:Folder;label:string;icon:typeof Inbox}[] = [
   {id:"INBOX",label:"الوارد",icon:Inbox},
   {id:"STARRED",label:"المميزة",icon:Star},
   {id:"SENT",label:"المرسلة",icon:Send},
   {id:"TRASH",label:"المحذوفات",icon:Trash2},
+  {id:"DRAFTS",label:"المسودات",icon:Mail},
 ];
 function EmailCenter() {
   const [folder,setFolder]=useState<Folder>("INBOX");
@@ -32,6 +33,17 @@ function EmailCenter() {
 
 
   const draft=()=>setCompose(false);
+  const saveDraft=async()=>{
+    if(!gmailEmail){toast.error("اربط Gmail أولًا");return;}
+    setSending(true);
+    try{
+      await invoke<string>("gmail_save_draft",{to,subject,body,attachments:files});
+      toast.success("تم حفظ المسودة في Gmail");
+      setCompose(false);setFiles([]);setTo("");setSubject("");setBody("");setReplyThread(null);
+      if(folder==="DRAFTS")await refreshMessages();
+    }catch(e){toast.error("تعذر حفظ المسودة: "+String(e));}
+    finally{setSending(false);}
+  };
   const addFiles=async(input:FileList|null)=>{
     if(!input)return;
     for(const file of Array.from(input)){
