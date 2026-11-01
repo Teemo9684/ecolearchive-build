@@ -511,3 +511,38 @@ pub async fn gmail_draft_action(app:tauri::AppHandle,id:String,action:String)->R
   Ok(())
  }).await.map_err(|e|e.to_string())?
 }
+
+#[cfg(test)]
+mod gmail_live_tests {
+ use super::*;
+ #[test]
+ fn compose_rfc2047_unicode_and_mime_attachments(){
+  let raw=gmail_build_raw("admin@example.com","موضوع إداري","نص عربي",
+   vec![OutgoingAttachment{name:"letter.pdf".into(),mime:"application/pdf".into(),
+     data:base64::engine::general_purpose::STANDARD.encode(b"PDF") }],None).unwrap();
+  let data=URL_SAFE_NO_PAD.decode(raw).unwrap();
+  let mail=String::from_utf8(data).unwrap();
+  assert!(mail.contains("Subject: =?UTF-8?B?"));
+  assert!(mail.contains("Content-Disposition: attachment"));
+  assert!(mail.contains("letter.pdf"));
+  assert!(mail.contains("To: admin@example.com"));
+  assert!(mail.contains("\r\n"));
+ }
+ #[test]
+ fn inline_and_external_attachments_are_found(){
+  let data=serde_json::json!({"parts":[
+   {"partId":"0.1","filename":"inline.txt","mimeType":"text/plain","body":{"data":"aGVsbG8","size":5}},
+   {"partId":"0.2","filename":"report.pdf","mimeType":"application/pdf","body":{"attachmentId":"file-123","size":1024}}
+  ]});
+  let mut result=Vec::new();gmail_attachment_parts(&data,&mut result);
+  assert_eq!(result.len(),2);
+  assert_eq!(result[0].part_id,"inline:0.1");
+  assert_eq!(result[1].part_id,"file-123");
+  assert_eq!(gmail_find_inline(&data,"0.1"),Some("aGVsbG8"));
+ }
+ #[test]
+ fn base64_mail_content_has_rfc_compatible_line_lengths(){
+  let encoded=gmail_mime_base64(&vec![42u8;1024]);
+  assert!(encoded.split("\r\n").all(|line|line.len()<=76));
+ }
+}
