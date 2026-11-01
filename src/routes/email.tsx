@@ -225,7 +225,7 @@ function EmailCenter() {
               <button onClick={()=>void manageMessage("STAR")} className="rounded-lg border px-3 py-2">تمييز بنجمة</button>
               <button onClick={()=>void manageMessage("ARCHIVE")} className="rounded-lg border px-3 py-2">أرشفة البريد</button>
               <button onClick={()=>void manageMessage(selected&&folder==="TRASH"?"RESTORE":"TRASH")} className="rounded-lg border px-3 py-2">{folder==="TRASH"?"استرجاع":"نقل للمحذوفات"}</button>
-            </div>
+            </div>}
             <div className="whitespace-pre-wrap break-words border-t pt-4 text-sm" dir="auto">{reading?"جارٍ فتح الرسالة…":messageBody}</div>
           </div>
         </div>}
