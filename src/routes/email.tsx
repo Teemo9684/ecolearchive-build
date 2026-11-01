@@ -92,6 +92,29 @@ export function EmailCenter() {
   };
   const [connecting,setConnecting]=useState(false);
   const [messages,setMessages]=useState<GmailItem[]>([]);
+  const folderCache=useRef<Record<string,GmailPage>>({});
+  const folderFetching=useRef<Set<string>>(new Set());
+  const accountRef=useRef<string|null>(null);
+  const refreshIndex=useRef(0);
+  const keyFor=(f:Folder,q:string)=>f+"::"+(f==="DRAFTS"?"":q);
+  const fetchFolder=async(f:Folder,q:string,force=false)=>{
+    const key=keyFor(f,q),cached=folderCache.current[key];
+    if(cached&&!force)return cached;
+    if(folderFetching.current.has(key))return cached;
+    folderFetching.current.add(key);
+    try{
+      const page:GmailPage=f==="DRAFTS"
+        ?{items:await invoke<GmailItem[]>("gmail_list_messages",{folder:f}),next_page_token:null}
+        :await invoke<GmailPage>("gmail_search_messages",{folder:f,query:q,pageToken:null});
+      if(accountRef.current===gmailEmail){
+        folderCache.current[key]=page;
+        if(folderRef.current===f&&queryRef.current===q){
+          setMessages(page.items);setNextPageToken(page.next_page_token);setMailError("");
+        }
+      }
+      return page;
+    }finally{folderFetching.current.delete(key);}
+  };
   const [loadingMessages,setLoadingMessages]=useState(false);
   const [selected,setSelected]=useState<GmailItem|null>(null);
   const [messageBody,setMessageBody]=useState("");
@@ -124,17 +147,32 @@ export function EmailCenter() {
   },[recipientsStorageKey]);
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   useEffect(()=>{
-    if(!gmailEmail||!isDesktopRuntime()){setMessages([]);setSelected(null);setMailError("");setNextPageToken(null);return;}
-    let active=true;
-    setLoadingMessages(true);setMailError("");setSelected(null);setNextPageToken(null);
-    const promise=folder==="DRAFTS"
-      ?invoke<GmailItem[]>("gmail_list_messages",{folder}).then(items=>({items,next_page_token:null} as GmailPage))
-      :invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:null});
-    void promise.then(page=>{if(active){setMessages(page.items);setNextPageToken(page.next_page_token);}})
-      .catch(e=>{if(active){setMessages([]);setMailError(String(e));toast.error("تعذر تحميل البريد: "+String(e));}})
-      .finally(()=>{if(active)setLoadingMessages(false);});
-    return ()=>{active=false;};
+    if(accountRef.current!==gmailEmail){
+      folderCache.current={};folderFetching.current.clear();accountRef.current=gmailEmail;refreshIndex.current=0;
+    }
+    if(!gmailEmail||!isDesktopRuntime()){
+      setMessages([]);setSelected(null);setMailError("");setNextPageToken(null);return;
+    }
+    const cached=folderCache.current[keyFor(folder,activeQuery)];
+    setMessages(cached?.items??[]);setNextPageToken(cached?.next_page_token??null);
+    setMailError("");setSelected(null);setLoadingMessages(!cached);
+    if(!cached)void fetchFolder(folder,activeQuery,true)
+      .catch(e=>{if(folderRef.current===folder&&queryRef.current===activeQuery)setMailError(String(e));})
+      .finally(()=>{if(folderRef.current===folder&&queryRef.current===activeQuery)setLoadingMessages(false);});
   },[gmailEmail,folder,activeQuery]);
+  useEffect(()=>{
+    if(!gmailEmail||!isDesktopRuntime())return;
+    let cancelled=false;
+    const preload=async()=>{
+      for(const f of folders.map(item=>item.id)){
+        if(cancelled)return;
+        if(folderCache.current[keyFor(f,"")])continue;
+        try{await fetchFolder(f,"");}catch{/* Other folders remain accessible. */}
+      }
+    };
+    void preload();
+    return ()=>{cancelled=true;};
+  },[gmailEmail]);
   useEffect(()=>{
     inboxIdsRef.current=null;
     setUnreadCount(0);
@@ -153,12 +191,14 @@ export function EmailCenter() {
         inboxIdsRef.current=newIds;
         setUnreadCount(snapshot.unread_count);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
+        const ready=folders.map(f=>f.id).filter(f=>folderCache.current[keyFor(f,"")]);
+        if(ready.length){
+          const f=ready[refreshIndex.current++%ready.length];
+          if(f!=="INBOX"||!arrived.length)void fetchFolder(f,"",true).catch(()=>{});
+        }
         if(arrived.length){
           if(notifyRef.current)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
-          if(folderRef.current==="INBOX"&&!queryRef.current){
-            const page=await invoke<GmailPage>("gmail_search_messages",{folder:"INBOX",query:"",pageToken:null});
-            if(active){setMessages(current=>[...page.items,...current.filter(item=>!page.items.some(m=>m.id===item.id))]);setNextPageToken(page.next_page_token);}
-          }
+          await fetchFolder("INBOX","",true).catch(()=>{});
         }
       }catch(e){
         // Temporary network issues must not interrupt reading or flood notifications.
@@ -229,13 +269,8 @@ export function EmailCenter() {
   const refreshMessages=async()=>{
     if(!gmailEmail)return;
     setLoadingMessages(true);setMailError("");
-    try{
-      if(folder==="DRAFTS"){setMessages(await invoke<GmailItem[]>("gmail_list_messages",{folder}));setNextPageToken(null);}
-      else{
-        const page=await invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:null});
-        setMessages(page.items);setNextPageToken(page.next_page_token);
-      }
-    }catch(e){setMailError(String(e));toast.error(String(e));}
+    try{await fetchFolder(folder,activeQuery,true);}
+    catch(e){setMailError(String(e));toast.error(String(e));}
     finally{setLoadingMessages(false);}
   };
   const loadMore=async()=>{
@@ -245,6 +280,11 @@ export function EmailCenter() {
       const page=await invoke<GmailPage>("gmail_search_messages",{folder,query:activeQuery,pageToken:nextPageToken});
       setMessages(prev=>[...prev,...page.items.filter(item=>!prev.some(old=>old.id===item.id))]);
       setNextPageToken(page.next_page_token);
+      const current=folderCache.current[keyFor(folder,activeQuery)];
+      folderCache.current[keyFor(folder,activeQuery)]={
+        items:[...(current?.items??[]),...page.items.filter(item=>!(current?.items??[]).some(old=>old.id===item.id))],
+        next_page_token:page.next_page_token
+      };
     }catch(e){toast.error("تعذر تحميل بقية الرسائل: "+String(e));}
     finally{setLoadingMore(false);}
   };
