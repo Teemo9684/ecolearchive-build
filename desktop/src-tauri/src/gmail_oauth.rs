@@ -304,7 +304,22 @@ fn gmail_get_json(http:&reqwest::blocking::Client,token:&str,url:&str)->Result<s
  let response=http.get(url).bearer_auth(token).send().map_err(|e|format!("تعذر جلب رسائل Gmail: {}",network_error_kind(&e)))?;
  if !response.status().is_success(){
   let status=response.status();
-  return Err(format!("رفض Gmail قراءة الرسائل (HTTP {status}). تحقق من صلاحيات Gmail API"));
+  // Google returns actionable reason codes; never expose raw bodies, tokens, or request URLs.
+  let body:serde_json::Value=response.json().unwrap_or_default();
+  let reason=body["error"]["errors"].as_array()
+   .and_then(|errors|errors.iter().find_map(|entry|entry["reason"].as_str()))
+   .or_else(||body["error"]["details"].as_array().and_then(|details|details.iter().find_map(|entry|entry["reason"].as_str())))
+   .unwrap_or("");
+  let message=match reason {
+   "accessNotConfigured"|"serviceDisabled"|"SERVICE_DISABLED" => "خدمة Gmail API غير مفعلة في مشروع Google Cloud. فعّل Gmail API في نفس مشروع OAuth.",
+   "insufficientPermissions"|"ACCESS_TOKEN_SCOPE_INSUFFICIENT" => "تفويض Gmail لا يحتوي على صلاحية القراءة. أعد ربط الحساب ووافق على صلاحيات Gmail.",
+   "rateLimitExceeded"|"userRateLimitExceeded"|"quotaExceeded" => "تم بلوغ حد طلبات Gmail API مؤقتا. حاول بعد قليل.",
+   "domainPolicy" => "سياسة مسؤول Google Workspace تمنع الوصول إلى Gmail API.",
+   "forbidden" => "Google رفض الطلب. تحقق من تفعيل Gmail API والصلاحيات الممنوحة للحساب.",
+   _ if status.as_u16()==403 => "Google رفض قراءة البريد. تحقق من تفعيل Gmail API في نفس مشروع OAuth وأعد ربط الحساب إذا لزم.",
+   _ => "تعذر قراءة الرسائل من Gmail."
+  };
+  return Err(format!("{message} (HTTP {status}{})",if reason.is_empty(){String::new()}else{format!(", السبب: {}",reason.chars().filter(|c|c.is_ascii_alphanumeric()||*c=='_').take(64).collect::<String>())}));
  }
  response.json().map_err(|_|"رد Gmail غير صالح".into())
 }
