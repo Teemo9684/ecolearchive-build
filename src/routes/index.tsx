@@ -169,19 +169,19 @@ function Dashboard() {
         <img src={hero} alt="" width={1920} height={640} className="absolute inset-0 h-full w-full scale-105 object-cover" style={{ transform: "scaleX(-1)" }} />
         <div className="absolute inset-0 bg-gradient-to-l from-sidebar/40 via-sidebar/75 to-sidebar/30" />
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-sidebar/80 to-transparent" />
-        <div className="relative flex flex-col gap-5 px-5 pb-11 pt-5 md:px-8 lg:flex-row lg:items-center">
-          <div className="hidden shrink-0 animate-fade-up lg:block">
-            <LovableSchoolLogo logo={approvedLogo} className="h-48 w-48" />
+        <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-5 pb-12 pt-6 md:px-8 md:pt-8 lg:min-h-[260px] lg:flex-row lg:items-center lg:gap-8 lg:px-10 lg:py-8">
+          <div className="hidden shrink-0 animate-fade-up lg:flex lg:w-40 lg:items-center lg:justify-center xl:w-44">
+            <LovableSchoolLogo logo={approvedLogo} className="h-40 w-40 xl:h-44 xl:w-44" />
           </div>
-          <div className="hero-ink flex-1 animate-fade-up text-center [animation-delay:120ms]">
-            <h1 className="text-2xl font-bold drop-shadow-lg md:text-4xl">{settings.schoolName}</h1>
-            <div className="mt-1 flex items-center justify-center gap-3 text-base opacity-90 md:text-xl">
+          <div className="hero-ink min-w-0 flex-1 animate-fade-up text-center [animation-delay:120ms]">
+            <h1 className="text-2xl font-bold leading-relaxed drop-shadow-lg md:text-3xl xl:text-4xl">{settings.schoolName}</h1>
+            <div className="mt-2 flex items-center justify-center gap-3 text-base opacity-90 md:text-lg xl:text-xl">
               <span className="h-px w-12 bg-gradient-to-l from-gold to-transparent md:w-20" />{settings.city}<span className="h-px w-12 bg-gradient-to-r from-gold to-transparent md:w-20" />
             </div>
-            <h2 className="school-ruqaa-title gold-text relative z-10 mt-2 mb-5 text-3xl leading-relaxed md:text-5xl md:leading-relaxed">منظومة التسيير الإداري والأرشيف الرقمي</h2>
+            <h2 className="school-ruqaa-title gold-text relative z-10 mx-auto mt-3 max-w-[720px] text-3xl leading-relaxed md:text-4xl md:leading-relaxed xl:text-5xl">منظومة التسيير الإداري والأرشيف الرقمي</h2>
             
           </div>
-          <div className="hero-ink order-first flex animate-fade-up flex-col gap-3 lg:order-last lg:w-80">
+          <div className="hero-ink order-first mx-auto flex w-full max-w-lg animate-fade-up flex-col gap-3 lg:order-last lg:mx-0 lg:w-[300px] lg:max-w-[300px] lg:shrink-0 xl:w-80 xl:max-w-80">
             <div className="flex w-full items-center gap-2">
               <form className="min-w-0 flex-1" onSubmit={(e) => { e.preventDefault(); navigate({ to: "/search", search: { q } }); }}>
                 <div className="relative">
@@ -198,14 +198,14 @@ function Dashboard() {
                 <UserRound className="h-5 w-5" />المديرة<ChevronDown className="h-4 w-4" />
               </button>
             </div>
-            <div className="glass flex items-center justify-between gap-3 rounded-2xl px-4 py-3">
+            <div className="glass flex min-h-[70px] items-center justify-between gap-3 rounded-2xl px-4 py-3">
               <div className="min-w-0">
-                <div className="text-xs opacity-75">{greeting(now)}، السيدة المديرة سلطاني عين الحياة</div>
+                <div className="text-xs leading-relaxed opacity-80">{greeting(now)}، السيدة المديرة سلطاني عين الحياة</div>
                 <div className="truncate text-sm font-semibold">{dateStr}</div>
               </div>
               <div className="gold-text font-sans text-3xl font-bold tabular-nums">{timeStr}</div>
             </div>
-            <div className="glass flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold">
+            <div className="glass flex min-h-10 items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold">
               <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-success" />
               <span>السنة الدراسية {settings.currentYear}</span>
             </div>
