@@ -282,7 +282,8 @@
 .header-gold-shimmer::after { content: ""; position: absolute; inset: 0 auto 0 -25%; width: 22%; background: linear-gradient(90deg,transparent,rgba(255,239,170,.65),transparent); animation: school-gold-sweep 9s ease-in-out infinite; pointer-events: none; }
 @keyframes school-gold-sweep { 0%,22% {left:-25%} 55%,100% {left:110%} }
 .nav-soft-glow { transition: background-color .24s ease, box-shadow .24s ease, padding-inline-start .24s ease; }
-.nav-soft-glow:hover, .nav-soft-glow:focus-visible { box-shadow: inset 3px 0 0 rgba(218,177,78,.75); }
+.sidebar-nav-hover:hover, .sidebar-nav-hover:focus-visible { box-shadow: inset 0 0 0 1px rgba(190,204,225,.24); }
+.sidebar-nav-current:hover, .sidebar-nav-current:focus-visible { box-shadow: inset 3px 0 0 #d7af67; }
 .notification-once { animation: school-alert-pop .6s ease-out 1; }
 @keyframes school-alert-pop { 0% { transform: scale(.82); } 48% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .logo-3d-spin, .header-gold-shimmer::after, .notification-once {animation:none!important;} .nav-soft-glow {transition:none!important;} }
