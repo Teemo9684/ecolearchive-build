@@ -9,7 +9,7 @@ import { toast } from "sonner";
  * Never ship the Lovable cloud gateway keys or request a Google account password.
  */
 export const Route = createFileRoute("/email")({ component: EmailCenter });
-type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean};
+type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string};
 type Folder = "INBOX" | "STARRED" | "SENT" | "TRASH";
 const folders: {id:Folder;label:string;icon:typeof Inbox}[] = [
   {id:"INBOX",label:"الوارد",icon:Inbox},
@@ -26,6 +26,7 @@ function EmailCenter() {
   const [body,setBody]=useState("");
   const [files,setFiles]=useState<{name:string;mime:string;data:string}[]>([]);
   const [sending,setSending]=useState(false);
+  const [replyThread,setReplyThread]=useState<{threadId:string;messageId:string}|null>(null);
   const [downloadList,setDownloadList]=useState<{part_id:string;name:string;mime:string;size:number}[]>([]);
   const [downloading,setDownloading]=useState("");
 
@@ -49,9 +50,9 @@ function EmailCenter() {
     if(!to.trim()||!to.includes("@")){toast.error("تحقق من البريد الإلكتروني للمرسل إليه");return;}
     setSending(true);
     try{
-      await invoke<string>("gmail_send_message",{to,subject,body,attachments:files});
+      await invoke<string>("gmail_send_message",{to,subject,body,attachments:files,threadId:replyThread?.threadId||null,inReplyTo:replyThread?.messageId||null});
       toast.success("تم إرسال الرسالة عبر Gmail");
-      setCompose(false);setTo("");setSubject("");setBody("");setFiles([]);
+      setCompose(false);setTo("");setSubject("");setBody("");setFiles([]);setReplyThread(null);
       if(folder==="SENT")await refreshMessages();
     }catch(e){toast.error("فشل الإرسال: "+String(e));}
     finally{setSending(false);}
@@ -99,6 +100,28 @@ function EmailCenter() {
       toast.success("تم حفظ المرفق: "+path);
     }catch(e){toast.error("تعذر تنزيل المرفق: "+String(e));}
     finally{setDownloading("");}
+  };
+  const manageMessage=async(action:"READ"|"UNREAD"|"STAR"|"UNSTAR"|"TRASH"|"RESTORE"|"ARCHIVE")=>{
+    if(!selected)return;
+    try{
+      await invoke<void>("gmail_update_message",{id:selected.id,action});
+      toast.success("تم تحديث الرسالة");
+      setSelected(null);
+      await refreshMessages();
+    }catch(e){toast.error("تعذر تعديل الرسالة: "+String(e));}
+  };
+  const reply=()=>{
+    if(!selected)return;
+    const from=selected.sender.match(/<([^>]+)>/)?.[1]||selected.sender;
+    setTo(from);setSubject(selected.subject.startsWith("Re:")?selected.subject:"Re: "+selected.subject);
+    setBody("");setFiles([]);setReplyThread({threadId:selected.thread_id,messageId:selected.message_id});
+    setSelected(null);setCompose(true);
+  };
+  const forward=()=>{
+    if(!selected)return;
+    setTo("");setSubject(selected.subject.startsWith("Fwd:")?selected.subject:"Fwd: "+selected.subject);
+    setBody("\n\n---------- Forwarded message ----------\nFrom: "+selected.sender+"\nSubject: "+selected.subject+"\n\n"+messageBody);
+    setReplyThread(null);setFiles([]);setSelected(null);setCompose(true);
   };
   const refreshMessages=async()=>{
     if(!gmailEmail)return;
@@ -168,6 +191,15 @@ function EmailCenter() {
             <p className="text-xs text-muted-foreground" dir="ltr">{selected.date}</p>
             {selected.has_attachments&&<p className="text-xs text-muted-foreground">الرسالة تحتوي على مرفقات.</p>}
             {downloadList.map(a=><button key={a.part_id} disabled={!!downloading} className="flex w-full items-center gap-2 rounded-lg border p-2 text-right text-sm" onClick={()=>void downloadAttachment(a)}><Paperclip className="h-4 w-4"/>{a.name} — {Math.round(a.size/1024)} KB {downloading===a.part_id?"(جارٍ التنزيل…)":"(تنزيل)"}</button>)}
+            <div className="flex flex-wrap gap-2 border-t pt-3 text-sm">
+              <button onClick={reply} className="rounded-lg border px-3 py-2">رد</button>
+              <button onClick={forward} className="rounded-lg border px-3 py-2">إعادة توجيه</button>
+              <button onClick={()=>void manageMessage("READ")} className="rounded-lg border px-3 py-2">تحديد كمقروء</button>
+              <button onClick={()=>void manageMessage("UNREAD")} className="rounded-lg border px-3 py-2">غير مقروء</button>
+              <button onClick={()=>void manageMessage("STAR")} className="rounded-lg border px-3 py-2">تمييز بنجمة</button>
+              <button onClick={()=>void manageMessage("ARCHIVE")} className="rounded-lg border px-3 py-2">أرشفة البريد</button>
+              <button onClick={()=>void manageMessage(selected&&folder==="TRASH"?"RESTORE":"TRASH")} className="rounded-lg border px-3 py-2">{folder==="TRASH"?"استرجاع":"نقل للمحذوفات"}</button>
+            </div>
             <div className="whitespace-pre-wrap break-words border-t pt-4 text-sm" dir="auto">{reading?"جارٍ فتح الرسالة…":messageBody}</div>
           </div>
         </div>}
