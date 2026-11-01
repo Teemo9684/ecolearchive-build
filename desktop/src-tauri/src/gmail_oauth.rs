@@ -366,13 +366,7 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
 }
 fn mime_safe(s:&str)->String{s.chars().filter(|c|c.is_ascii_alphanumeric()||"/.+-".contains(*c)).take(80).collect()}
 fn mail_header(s:&str)->String{s.chars().filter(|c|*c!='\r'&&*c!='\n'&& !c.is_control()).collect()}
-#[tauri::command]
-pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>,thread_id:Option<String>,in_reply_to:Option<String>)->Result<String,String>{
- let recipient=mail_header(to.trim());
- if recipient.is_empty()||recipient.len()>320||!recipient.contains('@')||recipient.contains(' '){return Err("عنوان المرسل إليه غير صالح".into())}
- if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم الرسالة أو عدد المرفقات تجاوز الحد".into())}
- tauri::async_runtime::spawn_blocking(move||{
-  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+fn gmail_build_raw(recipient:&str,subject:&str,body:&str,attachments:Vec<OutgoingAttachment>,in_reply_to:Option<&str>)->Result<String,String>{
   let boundary=format!("ecolearchive-{}",rand::random::<u64>());
   let encoded_subject=if subject.is_ascii(){mail_header(&subject)}else{format!("=?UTF-8?B?{}?=",base64::engine::general_purpose::STANDARD.encode(subject.as_bytes()))};
   let mut msg=format!("To: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");  if let Some(ref message_id)=in_reply_to{
@@ -398,7 +392,16 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
    }
    msg.push_str(&format!("\r\n--{boundary}--\r\n"));
   }
-  let raw=URL_SAFE_NO_PAD.encode(msg.as_bytes());
+  Ok(URL_SAFE_NO_PAD.encode(msg.as_bytes()))
+}
+#[tauri::command]
+pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>,thread_id:Option<String>,in_reply_to:Option<String>)->Result<String,String>{
+ let recipient=mail_header(to.trim());
+ if recipient.is_empty()||recipient.len()>320||!recipient.contains('@')||recipient.contains(' '){return Err("عنوان المرسل إليه غير صالح".into())}
+ if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم الرسالة أو عدد المرفقات تجاوز الحد".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let raw=gmail_build_raw(&recipient,&subject,&body,attachments,in_reply_to.as_deref())?;
   let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send").bearer_auth(&token)
     .json(&match thread_id.filter(|id|safe_message_id(id)){
      Some(id)=>serde_json::json!({"raw":raw,"threadId":id}),
