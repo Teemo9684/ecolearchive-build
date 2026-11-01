@@ -7,6 +7,7 @@ on:
       - 'desktop/src-tauri/src/**'
       - 'desktop/src-tauri/Cargo.toml'
       - 'src/routes/email.tsx'
+      - 'src/routes/index.tsx'
       - '.github/workflows/gmail-live-inbox-review.yml'
   workflow_dispatch:
 permissions:
