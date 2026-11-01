@@ -335,7 +335,7 @@ pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec
    return Ok(items);
   }
   let label=match folder.as_str(){"INBOX"|"SENT"|"STARRED"|"TRASH"=>folder.as_str(),_=>return Err("مجلد Gmail غير صالح".into())};
-  let url=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults=30");
+  let url=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults=30{} ",if label=="TRASH"{"&includeSpamTrash=true"}else{""}).trim().to_string();
   let listing=gmail_get_json(&http,&token,&url)?;
   let mut items=Vec::new();
   if let Some(messages)=listing["messages"].as_array(){
@@ -596,6 +596,7 @@ pub async fn gmail_search_messages(app:tauri::AppHandle,folder:String,query:Stri
   {
    let mut pairs=url.query_pairs_mut();
    pairs.append_pair("labelIds",label).append_pair("maxResults","30");
+   if label=="TRASH"{pairs.append_pair("includeSpamTrash","true");}
    if !query.trim().is_empty(){pairs.append_pair("q",query.trim());}
    if let Some(ref next)=page_token{pairs.append_pair("pageToken",next);}
   }
