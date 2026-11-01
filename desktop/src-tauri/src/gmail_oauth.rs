@@ -402,6 +402,11 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
 }
 fn mime_safe(s:&str)->String{s.chars().filter(|c|c.is_ascii_alphanumeric()||"/.+-".contains(*c)).take(80).collect()}
 fn mail_header(s:&str)->String{s.chars().filter(|c|*c!='\r'&&*c!='\n'&& !c.is_control()).collect()}
+fn gmail_mime_base64(bytes:&[u8])->String{
+ let encoded=base64::engine::general_purpose::STANDARD.encode(bytes);
+ encoded.as_bytes().chunks(76).map(|part|std::str::from_utf8(part).unwrap_or(""))
+ .collect::<Vec<_>>().join("\r\n")
+}
 fn gmail_build_raw(recipient:&str,subject:&str,body:&str,attachments:Vec<OutgoingAttachment>,in_reply_to:Option<&str>)->Result<String,String>{
   let boundary=format!("ecolearchive-{}",rand::random::<u64>());
   let encoded_subject=if subject.is_ascii(){mail_header(&subject)}else{format!("=?UTF-8?B?{}?=",base64::engine::general_purpose::STANDARD.encode(subject.as_bytes()))};
@@ -414,17 +419,17 @@ fn gmail_build_raw(recipient:&str,subject:&str,body:&str,attachments:Vec<Outgoin
 
   if attachments.is_empty(){
    msg.push_str("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
-   msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
+   msg.push_str(&gmail_mime_base64(body.as_bytes()));
   }else{
    msg.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"));
-   msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
+   msg.push_str(&gmail_mime_base64(body.as_bytes()));
    for a in attachments{
     let bytes=base64::engine::general_purpose::STANDARD.decode(&a.data).map_err(|_|"ترميز مرفق الإرسال غير صالح")?;
     if bytes.len()>15*1024*1024||msg.len()+bytes.len()*2>22*1024*1024{return Err("حجم مرفقات الإرسال كبير جدًا".into())}
     let name=safe_filename(&a.name);
     let mime=mime_safe(&a.mime);
     msg.push_str(&format!("\r\n--{boundary}\r\nContent-Type: {}; name=\"{}\"\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n",if mime.is_empty(){"application/octet-stream"}else{&mime},name,name));
-    msg.push_str(&base64::engine::general_purpose::STANDARD.encode(bytes));
+    msg.push_str(&gmail_mime_base64(&bytes));
    }
    msg.push_str(&format!("\r\n--{boundary}--\r\n"));
   }
