@@ -626,3 +626,19 @@ pub async fn gmail_search_messages(app:tauri::AppHandle,folder:String,query:Stri
   Ok(GmailPage{items,next_page_token:listing["nextPageToken"].as_str().map(str::to_owned)})
  }).await.map_err(|e|e.to_string())?
 }
+
+#[derive(Serialize)]
+pub struct GmailInboxState { ids:Vec<String>, unread_count:i64 }
+#[tauri::command]
+pub async fn gmail_inbox_state(app:tauri::AppHandle)->Result<GmailInboxState,String>{
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let listing=gmail_get_json(&http,&token,"https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=30")?;
+  let labels=gmail_get_json(&http,&token,"https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX")?;
+  let ids=listing["messages"].as_array().map(|messages|messages.iter()
+    .filter_map(|m|m["id"].as_str()).filter(|id|safe_message_id(id))
+    .map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
+  let unread_count=labels["messagesUnread"].as_i64().unwrap_or(0).max(0);
+  Ok(GmailInboxState{ids,unread_count})
+ }).await.map_err(|e|e.to_string())?
+}
