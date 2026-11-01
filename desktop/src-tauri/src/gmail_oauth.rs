@@ -269,6 +269,37 @@ fn gmail_plain_text(part:&serde_json::Value)->Option<String>{
  }
  part["parts"].as_array().and_then(|arr|arr.iter().find_map(gmail_plain_text))
 }
+fn gmail_html_to_text(html:&str)->String{
+ let mut result=String::new();
+ let mut inside_tag=false;
+ let mut tag=String::new();
+ for ch in html.chars(){
+  if ch=='<'{inside_tag=true;tag.clear();continue}
+  if ch=='>'&&inside_tag{
+   inside_tag=false;
+   let name=tag.trim().to_ascii_lowercase();
+   if name.starts_with("br")||name.starts_with("/p")||name.starts_with("/div")||name.starts_with("/li"){
+    result.push('\n');
+   }
+   continue;
+  }
+  if inside_tag{tag.push(ch);}
+  else{result.push(ch);}
+ }
+ result.replace("&nbsp;"," ").replace("&amp;","&")
+ .replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"")
+ .lines().map(str::trim).collect::<Vec<_>>().join("\n")
+}
+fn gmail_html_text(part:&serde_json::Value)->Option<String>{
+ if part["mimeType"].as_str()==Some("text/html"){
+  if let Some(encoded)=part["body"]["data"].as_str(){
+   if let Ok(bytes)=URL_SAFE_NO_PAD.decode(encoded){
+    if let Ok(html)=String::from_utf8(bytes){return Some(gmail_html_to_text(&html))}
+   }
+  }
+ }
+ part["parts"].as_array().and_then(|arr|arr.iter().find_map(gmail_html_text))
+}
 fn gmail_get_json(http:&reqwest::blocking::Client,token:&str,url:&str)->Result<serde_json::Value,String>{
  let response=http.get(url).bearer_auth(token).send().map_err(|e|format!("تعذر جلب رسائل Gmail: {}",network_error_kind(&e)))?;
  if !response.status().is_success(){
@@ -334,7 +365,7 @@ pub async fn gmail_read_message(app:tauri::AppHandle,id:String)->Result<String,S
   let http=gmail_http()?;
   let token=gmail_access_token(&app,&http)?;
   let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
-  Ok(gmail_plain_text(&data["payload"]).unwrap_or_else(||data["snippet"].as_str().unwrap_or("لا يوجد نص عادي متاح لهذه الرسالة").into()))
+  Ok(gmail_plain_text(&data["payload"]).or_else(||gmail_html_text(&data["payload"])).unwrap_or_else(||data["snippet"].as_str().unwrap_or("لا يوجد نص متاح لهذه الرسالة").into()))
  }).await.map_err(|e|e.to_string())?
 }
 
