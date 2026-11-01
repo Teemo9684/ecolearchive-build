@@ -222,8 +222,8 @@ function Dashboard() {
           </div>
         </div>
         {/* Glass ticker is embedded inside the hero, flush with its lower edge. */}
-        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center border-t border-white/20 bg-white/[0.09] text-white shadow-[0_-3px_20px_rgba(0,0,0,.12)] backdrop-blur-xl">
-          <div className="relative z-20 flex h-full shrink-0 items-center gap-2 border-e border-white/20 bg-slate-950/30 px-3 text-xs font-semibold text-amber-200 md:px-5">
+        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center border-t border-white/10 bg-white/[0.065] text-white shadow-[0_-3px_20px_rgba(0,0,0,.08)] backdrop-blur-2xl">
+          <div className="relative z-20 flex h-full shrink-0 items-center gap-2 bg-white/[0.035] px-3 text-xs font-semibold text-amber-200 backdrop-blur-md md:px-5">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden="true" />
             <span>آخر المستجدات</span>
           </div>
