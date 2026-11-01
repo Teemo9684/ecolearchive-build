@@ -660,6 +660,37 @@ pub async fn gmail_search_messages(app:tauri::AppHandle,folder:String,query:Stri
  }).await.map_err(|e|e.to_string())?
 }
 
+// Retrieve only message identifiers, paginating to detect mail received while the app was closed.
+#[tauri::command]
+pub async fn gmail_inbox_arrivals_since(app:tauri::AppHandle,since:i64)->Result<Vec<String>,String>{
+ if since<0 || since>4102444800 {return Err("تاريخ المزامنة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let mut ids=Vec::new();
+  let mut page_token:Option<String>=None;
+  for _ in 0..30 {
+   let mut url=url::Url::parse("https://gmail.googleapis.com/gmail/v1/users/me/messages").map_err(|e|e.to_string())?;
+   {
+    let mut q=url.query_pairs_mut();
+    q.append_pair("q",&format!("in:inbox after:{since}"));
+    q.append_pair("maxResults","100");
+    if let Some(ref page)=page_token {q.append_pair("pageToken",page);}
+   }
+   let data=gmail_get_json(&http,&token,url.as_str())?;
+   if let Some(messages)=data["messages"].as_array(){
+    for m in messages{
+     if let Some(id)=m["id"].as_str().filter(|id|safe_message_id(id)){
+      ids.push(id.to_owned());
+     }
+    }
+   }
+   page_token=data["nextPageToken"].as_str().map(str::to_owned);
+   if page_token.is_none(){return Ok(ids)}
+  }
+  Err("عدد الرسائل الجديدة كبير جدًا لإتمام المزامنة؛ حاول لاحقًا".into())
+ }).await.map_err(|e|e.to_string())?
+}
+
 #[derive(Serialize)]
 pub struct GmailInboxState { ids:Vec<String>, unread_count:i64 }
 #[tauri::command]
