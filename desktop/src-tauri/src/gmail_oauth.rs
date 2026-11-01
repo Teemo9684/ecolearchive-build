@@ -312,7 +312,7 @@ pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec
     let Some(id)=msg["id"].as_str()else{continue};
     let safe_id=id.chars().all(|c|c.is_ascii_alphanumeric());
     if !safe_id{continue}
-    let detail=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=metadata"))?;
+    let detail=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
     let labels=detail["labelIds"].as_array();
     items.push(GmailItem{
      id:id.into(),thread_id:detail["threadId"].as_str().unwrap_or("").into(),
