@@ -459,7 +459,9 @@ fn gmail_build_raw(recipient:&str,subject:&str,body:&str,attachments:Vec<Outgoin
     if bytes.len()>15*1024*1024||msg.len()+bytes.len()*2>22*1024*1024{return Err("حجم مرفقات الإرسال كبير جدًا".into())}
     let name=safe_filename(&a.name);
     let mime=mime_safe(&a.mime);
-    msg.push_str(&format!("\r\n--{boundary}\r\nContent-Type: {}; name=\"{}\"\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n",if mime.is_empty(){"application/octet-stream"}else{&mime},name,name));
+    let encoded_name=url::form_urlencoded::byte_serialize(name.as_bytes()).collect::<String>();
+    let fallback=if name.is_ascii(){name.as_str()}else{"attachment"};
+    msg.push_str(&format!("\r\n--{boundary}\r\nContent-Type: {}\r\nContent-Disposition: attachment; filename=\"{}\"; filename*=UTF-8''{}\r\nContent-Transfer-Encoding: base64\r\n\r\n",if mime.is_empty(){"application/octet-stream"}else{&mime},fallback,encoded_name));
     msg.push_str(&gmail_mime_base64(&bytes));
    }
    msg.push_str(&format!("\r\n--{boundary}--\r\n"));
