@@ -230,7 +230,7 @@ fn open_browser(_link:&str)->Result<(),String>{Err("Requires Windows".into())}
 #[derive(Serialize)]
 pub struct GmailItem {
  id:String, thread_id:String, subject:String, sender:String, date:String,
- snippet:String, unread:bool, has_attachments:bool, message_id:String,
+ snippet:String, unread:bool, has_attachments:bool, message_id:String, draft_id:Option<String>,
 }
 fn gmail_http()->Result<reqwest::blocking::Client,String>{
  reqwest::blocking::Client::builder()
@@ -280,9 +280,30 @@ fn gmail_get_json(http:&reqwest::blocking::Client,token:&str,url:&str)->Result<s
 #[tauri::command]
 pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec<GmailItem>,String>{
  tauri::async_runtime::spawn_blocking(move||{
-  let label=match folder.as_str(){"INBOX"|"SENT"|"STARRED"|"TRASH"=>folder.as_str(),_=>return Err("مجلد Gmail غير صالح".into())};
   let http=gmail_http()?;
   let token=gmail_access_token(&app,&http)?;
+  if folder=="DRAFTS"{
+   let listing=gmail_get_json(&http,&token,"https://gmail.googleapis.com/gmail/v1/users/me/drafts?maxResults=30")?;
+   let mut items=Vec::new();
+   if let Some(drafts)=listing["drafts"].as_array(){
+    for draft in drafts{
+     let Some(draft_id)=draft["id"].as_str()else{continue};
+     if !safe_message_id(draft_id){continue}
+     let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/drafts/{draft_id}?format=full"))?;
+     let m=&data["message"];
+     items.push(GmailItem{
+      id:m["id"].as_str().unwrap_or("").into(),
+      thread_id:m["threadId"].as_str().unwrap_or("").into(),
+      sender:gmail_headers(m,"To"),subject:gmail_headers(m,"Subject"),
+      date:gmail_headers(m,"Date"),snippet:m["snippet"].as_str().unwrap_or("").into(),
+      unread:false,has_attachments:m["payload"]["parts"].as_array().is_some_and(|a|a.iter().any(gmail_has_attachment)),
+      message_id:gmail_headers(m,"Message-ID"),draft_id:Some(draft_id.to_owned()),
+     });
+    }
+   }
+   return Ok(items);
+  }
+  let label=match folder.as_str(){"INBOX"|"SENT"|"STARRED"|"TRASH"=>folder.as_str(),_=>return Err("مجلد Gmail غير صالح".into())};
   let url=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults=30");
   let listing=gmail_get_json(&http,&token,&url)?;
   let mut items=Vec::new();
@@ -297,7 +318,7 @@ pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec
      id:id.into(),thread_id:detail["threadId"].as_str().unwrap_or("").into(),
      sender:gmail_headers(&detail,"From"),subject:gmail_headers(&detail,"Subject"),
      date:gmail_headers(&detail,"Date"),
-     snippet:detail["snippet"].as_str().unwrap_or("").into(),message_id:gmail_headers(&detail,"Message-ID"),
+     snippet:detail["snippet"].as_str().unwrap_or("").into(),message_id:gmail_headers(&detail,"Message-ID"),draft_id:None,
      unread:labels.is_some_and(|l|l.iter().any(|v|v.as_str()==Some("UNREAD"))),
      has_attachments:detail["payload"]["parts"].as_array().is_some_and(|a|a.iter().any(gmail_has_attachment))
     });
@@ -435,6 +456,38 @@ pub async fn gmail_update_message(app:tauri::AppHandle,id:String,action:String)-
    _=>return Err("عملية Gmail غير مدعومة".into()),
   }.map_err(|e|format!("خطأ الاتصال عند تحديث Gmail: {}",network_error_kind(&e)))?;
   if !response.status().is_success(){return Err(format!("رفض Gmail العملية (HTTP {}). قد يلزم إعادة ربط الحساب للسماح بتعديل الرسائل.",response.status()))}
+  Ok(())
+ }).await.map_err(|e|e.to_string())?
+}
+
+#[tauri::command]
+pub async fn gmail_save_draft(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>)->Result<String,String>{
+ if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم المسودة كبير جدًا".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let recipient=mail_header(to.trim());
+  if !recipient.is_empty()&&(!recipient.contains('@')||recipient.len()>320){return Err("عنوان المستلم غير صالح".into())}
+  let raw=gmail_build_raw(&recipient,&subject,&body,attachments,None)?;
+  let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/drafts").bearer_auth(&token)
+   .json(&serde_json::json!({"message":{"raw":raw}})).send()
+   .map_err(|e|format!("فشل حفظ مسودة Gmail: {}",network_error_kind(&e)))?;
+  if !response.status().is_success(){return Err(format!("رفض Gmail حفظ المسودة (HTTP {})؛ قد يلزم تجديد الصلاحيات",response.status()))}
+  let data:serde_json::Value=response.json().map_err(|_|"استجابة المسودة غير صالحة")?;
+  data["id"].as_str().map(str::to_owned).ok_or("لم يرجع Gmail معرف المسودة".into())
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+pub async fn gmail_draft_action(app:tauri::AppHandle,id:String,action:String)->Result<(),String>{
+ if !safe_message_id(&id){return Err("معرّف المسودة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let response=match action.as_str(){
+   "SEND"=>http.post("https://gmail.googleapis.com/gmail/v1/users/me/drafts/send").bearer_auth(&token)
+     .json(&serde_json::json!({"id":id})).send(),
+   "DELETE"=>http.delete(format!("https://gmail.googleapis.com/gmail/v1/users/me/drafts/{id}")).bearer_auth(&token).send(),
+   _=>return Err("عملية مسودة غير مدعومة".into())
+  }.map_err(|e|format!("فشل اتصال Gmail للمسودات: {}",network_error_kind(&e)))?;
+  if !response.status().is_success(){return Err(format!("رفض Gmail عملية المسودة (HTTP {})",response.status()))}
   Ok(())
  }).await.map_err(|e|e.to_string())?
 }
