@@ -2,7 +2,7 @@ name: Build signed EcoleArchive v1.0.38 candidate
 on:
   push:
     branches:
-      - release/v1-0-38-gmail-polish
+      - release/v1-0-38-attachments-header
     paths:
       - 'src/**'
       - 'desktop/**'
@@ -115,7 +115,7 @@ jobs:
 
   publish-signed-update:
     needs: signed-windows-candidate
-    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-38-gmail-polish'
+    if: github.repository == 'Teemo9684/ecolearchive-build' && github.ref == 'refs/heads/release/v1-0-38-attachments-header'
     runs-on: ubuntu-latest
     environment: windows-updates
     concurrency:
