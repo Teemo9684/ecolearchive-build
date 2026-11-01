@@ -1,4 +1,5 @@
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
+import { useGmailUnreadCount } from "@/lib/gmail-unread";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const corr = useCollection<Correspondence>("correspondences");
   const pendingIn = useIncomingAlerts(corr.data, path);
+  const gmailUnread = useGmailUnreadCount();
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [q, setQ] = useState("");
@@ -94,6 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <it.icon className="h-5 w-5 shrink-0" />
                     <span className="flex-1">{fr ? NAV_FR[it.to] ?? it.label : it.label}</span>
+                    {it.to === "/email" && gmailUnread > 0 && <span className="grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground" aria-label={`${gmailUnread} رسائل Gmail غير مقروءة`}>{gmailUnread}</span>}
                     {it.badge && pendingIn > 0 && (
                       <span className="notification-once grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground" key={pendingIn}>{pendingIn}</span>
                     )}
