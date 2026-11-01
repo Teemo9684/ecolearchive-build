@@ -126,6 +126,7 @@ export function EmailCenter() {
   const [notifyNew,setNotifyNew]=useState(true);
   const [lastSynced,setLastSynced]=useState<string|null>(null);
   const inboxIdsRef=useRef<Set<string>|null>(null);
+  const newInboxIdsRef=useRef<Set<string>>(new Set());
   const syncInFlightRef=useRef(false);
   const folderRef=useRef(folder);
   const queryRef=useRef(activeQuery);
@@ -176,6 +177,7 @@ export function EmailCenter() {
   },[gmailEmail]);
   useEffect(()=>{
     inboxIdsRef.current=null;
+    newInboxIdsRef.current.clear();
     setUnreadCount(0);
     setGmailUnreadCount(0);
     setLastSynced(null);
@@ -192,7 +194,12 @@ export function EmailCenter() {
         const arrived=previous?snapshot.ids.filter(id=>!previous.has(id)):[];
         inboxIdsRef.current=newIds;
         setUnreadCount(snapshot.unread_count);
-        setGmailUnreadCount(snapshot.unread_count);
+        // First successful poll is the baseline: thousands of older unread
+        // messages must not be presented as newly arrived notifications.
+        for(const id of arrived)newInboxIdsRef.current.add(id);
+        // Keep alerts only for messages still in the inbox.
+        for(const id of newInboxIdsRef.current)if(!newIds.has(id))newInboxIdsRef.current.delete(id);
+        setGmailUnreadCount(newInboxIdsRef.current.size);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
         // Inbox always has priority: poll IDs every 5 seconds and refresh its list
         // immediately when messages arrive. Refresh other folders less often.
@@ -220,6 +227,7 @@ export function EmailCenter() {
     return ()=>{active=false;window.clearInterval(timer);window.removeEventListener("online",onResume);document.removeEventListener("visibilitychange",onResume);};
   },[gmailEmail,autoSync]);
   const readMessage=async(item:GmailItem)=>{
+    if(newInboxIdsRef.current.delete(item.id))setGmailUnreadCount(newInboxIdsRef.current.size);
     setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
       const [text,attachments]=await Promise.all([
