@@ -191,14 +191,18 @@ export function EmailCenter() {
         inboxIdsRef.current=newIds;
         setUnreadCount(snapshot.unread_count);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
-        const ready=folders.map(f=>f.id).filter(f=>folderCache.current[keyFor(f,"")]);
-        if(ready.length){
-          const f=ready[refreshIndex.current++%ready.length];
-          if(f!=="INBOX"||!arrived.length)void fetchFolder(f,"",true).catch(()=>{});
-        }
+        // Inbox always has priority: poll IDs every 5 seconds and refresh its list
+        // immediately when messages arrive. Refresh other folders less often.
         if(arrived.length){
           if(notifyRef.current)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
           await fetchFolder("INBOX","",true).catch(()=>{});
+        }
+        // A rotating background refresh of the other four cached folders runs
+        // approximately every 30 seconds and never blocks the next inbox check.
+        const others=folders.map(f=>f.id).filter(f=>f!=="INBOX"&&folderCache.current[keyFor(f,"")]);
+        if(others.length && refreshIndex.current++%6===0){
+          const f=others[Math.floor((refreshIndex.current-1)/6)%others.length];
+          void fetchFolder(f,"",true).catch(()=>{});
         }
       }catch(e){
         // Temporary network issues must not interrupt reading or flood notifications.
