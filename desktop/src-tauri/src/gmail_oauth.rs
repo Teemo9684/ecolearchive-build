@@ -438,10 +438,11 @@ fn gmail_mime_base64(bytes:&[u8])->String{
  encoded.as_bytes().chunks(76).map(|part|std::str::from_utf8(part).unwrap_or(""))
  .collect::<Vec<_>>().join("\r\n")
 }
-fn gmail_build_raw(recipient:&str,subject:&str,body:&str,attachments:Vec<OutgoingAttachment>,in_reply_to:Option<&str>)->Result<String,String>{
+fn gmail_build_raw(sender:&str,recipient:&str,subject:&str,body:&str,attachments:Vec<OutgoingAttachment>,in_reply_to:Option<&str>)->Result<String,String>{
   let boundary=format!("ecolearchive-{}",rand::random::<u64>());
   let encoded_subject=if subject.is_ascii(){mail_header(&subject)}else{format!("=?UTF-8?B?{}?=",base64::engine::general_purpose::STANDARD.encode(subject.as_bytes()))};
-  let mut msg=format!("To: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");  if let Some(ref message_id)=in_reply_to{
+  let sender=mail_header(sender);
+  let mut msg=format!("From: {sender}\r\nTo: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");  if let Some(ref message_id)=in_reply_to{
    let value=mail_header(message_id);
    if !value.is_empty()&&value.len()<300{
     msg.push_str(&format!("In-Reply-To: {value}\r\nReferences: {value}\r\n"));
@@ -475,7 +476,8 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
  if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم الرسالة أو عدد المرفقات تجاوز الحد".into())}
  tauri::async_runtime::spawn_blocking(move||{
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
-  let raw=gmail_build_raw(&recipient,&subject,&body,attachments,in_reply_to.as_deref())?;
+  let sender=load(&app)?.ok_or("حساب Gmail غير مرتبط")?.email;
+  let raw=gmail_build_raw(&sender,&recipient,&subject,&body,attachments,in_reply_to.as_deref())?;
   let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send").bearer_auth(&token)
     .json(&match thread_id.filter(|id|safe_message_id(id)){
      Some(id)=>serde_json::json!({"raw":raw,"threadId":id}),
@@ -520,7 +522,8 @@ pub async fn gmail_save_draft(app:tauri::AppHandle,to:String,subject:String,body
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   let recipient=mail_header(to.trim());
   if !recipient.is_empty()&&(!recipient.contains('@')||recipient.len()>320){return Err("عنوان المستلم غير صالح".into())}
-  let raw=gmail_build_raw(&recipient,&subject,&body,attachments,None)?;
+  let sender=load(&app)?.ok_or("حساب Gmail غير مرتبط")?.email;
+  let raw=gmail_build_raw(&sender,&recipient,&subject,&body,attachments,None)?;
   let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/drafts").bearer_auth(&token)
    .json(&serde_json::json!({"message":{"raw":raw}})).send()
    .map_err(|e|format!("فشل حفظ مسودة Gmail: {}",network_error_kind(&e)))?;
@@ -550,7 +553,7 @@ mod gmail_live_tests {
  use super::*;
  #[test]
  fn compose_rfc2047_unicode_and_mime_attachments(){
-  let raw=gmail_build_raw("admin@example.com","موضوع إداري","نص عربي",
+  let raw=gmail_build_raw("school@example.com","admin@example.com","موضوع إداري","نص عربي",
    vec![OutgoingAttachment{name:"letter.pdf".into(),mime:"application/pdf".into(),
      data:base64::engine::general_purpose::STANDARD.encode(b"PDF") }],None).unwrap();
   let data=URL_SAFE_NO_PAD.decode(raw).unwrap();
