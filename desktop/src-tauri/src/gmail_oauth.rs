@@ -419,7 +419,7 @@ fn safe_filename(name:&str)->String{
 }
 #[tauri::command]
 pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:String,name:String)->Result<String,String>{
- if !safe_message_id(&id)||part_id.len()>200||part_id.is_empty()||!part_id.chars().all(|c|c.is_ascii_alphanumeric()||"._:-".contains(c)){return Err("معرّف المرفق غير صالح".into())}
+ if !safe_message_id(&id)||part_id.is_empty()||part_id.len()>4096||!part_id.bytes().all(|b|b.is_ascii_graphic()){return Err("معرّف المرفق غير صالح".into())}
  tauri::async_runtime::spawn_blocking(move||{
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   // Verify this part belongs to the message before downloading.
@@ -431,7 +431,8 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
    inline_data=gmail_find_inline(&message["payload"],inline_part).ok_or("تعذر العثور على بيانات المرفق الداخلي")?.to_string();
    inline_data.as_str()
   }else{
-   let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{part_id}"))?;
+   let encoded_id:String=url::form_urlencoded::byte_serialize(part_id.as_bytes()).collect();
+   let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
    inline_data=data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string();
    inline_data.as_str()
   };
