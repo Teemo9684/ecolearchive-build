@@ -29,6 +29,7 @@ function EmailCenter() {
 
   const [compose,setCompose]=useState(false);
   const [to,setTo]=useState("");
+  const [recentRecipients,setRecentRecipients]=useState<string[]>([]);
   const [subject,setSubject]=useState("");
   const [body,setBody]=useState("");
   const [files,setFiles]=useState<{name:string;mime:string;data:string}[]>([]);
@@ -69,6 +70,7 @@ function EmailCenter() {
     setSending(true);
     try{
       await invoke<string>("gmail_send_message",{to,subject,body,attachments:files,threadId:replyThread?.threadId||null,inReplyTo:replyThread?.messageId||null});
+      rememberRecipient(to);
       toast.success("تم إرسال الرسالة عبر Gmail");
       setCompose(false);setTo("");setSubject("");setBody("");setFiles([]);setReplyThread(null);
       if(folder==="SENT")await refreshMessages();
@@ -77,6 +79,16 @@ function EmailCenter() {
   };
   const [accountMenu,setAccountMenu]=useState(false);
   const [gmailEmail,setGmailEmail]=useState<string|null>(null);
+  const recipientsStorageKey=gmailEmail?"ecolearchive:gmail-recipients:"+gmailEmail.toLowerCase():null;
+  const rememberRecipient=(address:string)=>{
+    const email=address.trim().toLowerCase();
+    if(!recipientsStorageKey||!email||!email.includes("@"))return;
+    setRecentRecipients(previous=>{
+      const updated=[email,...previous.filter(value=>value.toLowerCase()!==email)].slice(0,100);
+      try{window.localStorage.setItem(recipientsStorageKey,JSON.stringify(updated));}catch{/* Local storage unavailable; retain in-memory suggestions. */}
+      return updated;
+    });
+  };
   const [connecting,setConnecting]=useState(false);
   const [messages,setMessages]=useState<GmailItem[]>([]);
   const [loadingMessages,setLoadingMessages]=useState(false);
@@ -102,6 +114,13 @@ function EmailCenter() {
 
   const settings=useSettings();
   const readClientId=()=>settings.gmailClientId?.trim()||"";
+  useEffect(()=>{
+    if(!recipientsStorageKey){setRecentRecipients([]);return;}
+    try{
+      const stored=JSON.parse(window.localStorage.getItem(recipientsStorageKey)||"[]") as unknown;
+      setRecentRecipients(Array.isArray(stored)?stored.filter((value):value is string=>typeof value==="string"&&value.includes("@")).slice(0,100):[]);
+    }catch{setRecentRecipients([]);}
+  },[recipientsStorageKey]);
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   useEffect(()=>{
     if(!gmailEmail||!isDesktopRuntime()){setMessages([]);setSelected(null);setMailError("");setNextPageToken(null);return;}
@@ -146,7 +165,7 @@ function EmailCenter() {
       }finally{syncInFlightRef.current=false;}
     };
     void sync();
-    const timer=window.setInterval(()=>void sync(),15000);
+    const timer=window.setInterval(()=>void sync(),5000);
     const onResume=()=>{if(document.visibilityState==="visible")void sync();};
     window.addEventListener("online",onResume);
     document.addEventListener("visibilitychange",onResume);
@@ -271,7 +290,7 @@ function EmailCenter() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={autoSync} onChange={e=>setAutoSync(e.target.checked)}/> مزامنة تلقائية كل 15 ثانية</label>
+            <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={autoSync} onChange={e=>setAutoSync(e.target.checked)}/> مزامنة تلقائية كل 5 ثواني</label>
             <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={notifyNew} onChange={e=>setNotifyNew(e.target.checked)}/> تنبيه الرسائل الجديدة</label>
           </div>
           <span>{lastSynced?"آخر فحص: "+lastSynced:""}</span>
@@ -318,7 +337,7 @@ function EmailCenter() {
     {compose&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="رسالة جديدة">
       <div className="panel w-full max-w-2xl space-y-3 p-5">
         <div className="flex items-center justify-between"><h2 className="text-lg font-bold">رسالة جديدة</h2><button title="إغلاق" onClick={draft}><X/></button></div>
-        <label className="block text-sm">إلى<input className="field-select mt-1 w-full" type="email" value={to} onChange={e=>setTo(e.target.value)}/></label>
+        <label className="block text-sm">إلى<input className="field-select mt-1 w-full" type="email" list="gmail-recipient-suggestions" autoComplete="email" value={to} onChange={e=>setTo(e.target.value)}/><datalist id="gmail-recipient-suggestions">{recentRecipients.map(address=><option key={address} value={address}/>)}</datalist></label>
         <label className="block text-sm">الموضوع<input className="field-select mt-1 w-full" value={subject} onChange={e=>setSubject(e.target.value)}/></label>
         <label className="block text-sm">الرسالة<textarea className="field-select mt-1 min-h-48 w-full" value={body} onChange={e=>setBody(e.target.value)}/></label>
         <label className="block text-sm">إرفاق ملفات (حتى 10 ملفات، 15MB للملف الواحد)<input type="file" multiple className="mt-2 block w-full text-sm" onChange={e=>void addFiles(e.target.files)}/></label>
