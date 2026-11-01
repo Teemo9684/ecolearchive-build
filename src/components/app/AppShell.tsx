@@ -123,9 +123,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <it.icon className="h-5 w-5 shrink-0" />
                     <span className={cn("min-w-0 flex-1",collapsed && "md:hidden")}>{fr ? NAV_FR[it.to] ?? it.label : it.label}</span>
-                    {it.to === "/email" && gmailUnread > 0 && <span className={cn("grid h-6 min-w-6 place-items-center rounded-full bg-destructive", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} px-1.5 text-xs font-bold text-destructive-foreground" aria-label={`${gmailUnread} رسائل Gmail غير مقروءة`}>{gmailUnread}</span>}
+                    {it.to === "/email" && gmailUnread > 0 && <span className={cn("grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} aria-label={`${gmailUnread} رسائل Gmail غير مقروءة`}>{gmailUnread}</span>}
                     {it.badge && pendingIn > 0 && (
-                      <span className={cn("notification-once grid h-6 min-w-6 place-items-center rounded-full bg-destructive", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} px-1.5 text-xs font-bold text-destructive-foreground" key={pendingIn}>{pendingIn}</span>
+                      <span className={cn("notification-once grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} key={pendingIn}>{pendingIn}</span>
                     )}
                   </Link>
                 );
