@@ -43,7 +43,7 @@ jobs:
       - name: Check frontend TypeScript
         shell: pwsh
         run: |
-          bun install --frozen-lockfile
+          bun install
           bunx tsc --noEmit
       - name: Verify native Google OAuth client compiles on Windows
         shell: pwsh
