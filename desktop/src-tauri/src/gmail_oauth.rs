@@ -390,13 +390,31 @@ pub struct OutgoingAttachment {name:String,mime:String,data:String}
 pub struct GmailAttachment {part_id:String,name:String,mime:String,size:i64}
 fn gmail_attachment_parts(node:&serde_json::Value,out:&mut Vec<GmailAttachment>){
  if let Some(name)=node["filename"].as_str().filter(|v|!v.is_empty()){
-  let attachment_id=node["body"]["attachmentId"].as_str().map(str::to_owned)
-    .or_else(||node["partId"].as_str().filter(|_|node["body"]["data"].is_string()).map(|p|format!("inline:{p}")));
+  let attachment_id=node["partId"].as_str().filter(|p|!p.is_empty()).map(|p|format!("part:{p}"))
+    .or_else(||node["body"]["attachmentId"].as_str().map(str::to_owned));
   if let Some(part_id)=attachment_id{
    out.push(GmailAttachment{part_id,name:name.into(),mime:node["mimeType"].as_str().unwrap_or("application/octet-stream").into(),size:node["body"]["size"].as_i64().unwrap_or(0)});
   }
  }
  if let Some(parts)=node["parts"].as_array(){for part in parts{gmail_attachment_parts(part,out)}}
+}
+fn gmail_find_part<'a>(node:&'a serde_json::Value,part_id:&str)->Option<&'a serde_json::Value>{
+ if node["partId"].as_str()==Some(part_id){return Some(node)}
+ node["parts"].as_array().and_then(|parts|parts.iter().find_map(|part|gmail_find_part(part,part_id)))
+}
+fn gmail_verified_part<'a>(message:&'a serde_json::Value,part_id:&str)->Result<&'a serde_json::Value,String>{
+ if let Some(p)=part_id.strip_prefix("part:"){
+  let node=gmail_find_part(&message["payload"],p).ok_or("المرفق لا ينتمي للرسالة")?;
+  if node["filename"].as_str().unwrap_or("").is_empty(){return Err("المرفق لا ينتمي للرسالة".into())}
+  if !node["body"]["attachmentId"].is_string()&&!node["body"]["data"].is_string(){return Err("بيانات المرفق غير متاحة".into())}
+  return Ok(node)
+ }
+ // Backward compatibility: the UI might still hold an older opaque Gmail ID.
+ fn find_legacy<'a>(node:&'a serde_json::Value,id:&str)->Option<&'a serde_json::Value>{
+  if node["body"]["attachmentId"].as_str()==Some(id)&&node["filename"].as_str().is_some_and(|n|!n.is_empty()){return Some(node)}
+  node["parts"].as_array().and_then(|parts|parts.iter().find_map(|part|find_legacy(part,id)))
+ }
+ find_legacy(&message["payload"],part_id).ok_or_else(||"المرفق لا ينتمي للرسالة".into())
 }
 fn gmail_find_inline<'a>(node:&'a serde_json::Value,part_id:&str)->Option<&'a str>{
  if node["partId"].as_str()==Some(part_id){return node["body"]["data"].as_str()}
@@ -424,17 +442,17 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   // Verify this part belongs to the message before downloading.
   let message=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
-  let mut known=Vec::new();gmail_attachment_parts(&message["payload"],&mut known);
-  // The attachment ID is the authoritative link; UI-provided filenames can differ after MIME decoding.
-  // Resolve the filename from the freshly fetched message instead of trusting the UI.
-  let verified=known.iter().find(|a|a.part_id==part_id).ok_or("المرفق لا ينتمي للرسالة")?;
-  let verified_name=verified.name.clone();
+  let verified=gmail_verified_part(&message,&part_id)?;
+  let verified_name=verified["filename"].as_str().unwrap_or("attachment.bin").to_string();
+  let actual_id=verified["body"]["attachmentId"].as_str().map(str::to_owned);
+  let inline_part=verified["partId"].as_str().map(str::to_owned);
+  let embedded=verified["body"]["data"].as_str().map(str::to_owned);
   let inline_data;
-  let encoded=if let Some(inline_part)=part_id.strip_prefix("inline:"){
-   inline_data=gmail_find_inline(&message["payload"],inline_part).ok_or("تعذر العثور على بيانات المرفق الداخلي")?.to_string();
-   inline_data.as_str()
+  let encoded=if let Some(data)=embedded{
+   inline_data=data;inline_data.as_str()
   }else{
-   let encoded_id:String=url::form_urlencoded::byte_serialize(part_id.as_bytes()).collect();
+   let actual_id=actual_id.ok_or("معرّف التحميل غير متاح")?;
+   let encoded_id:String=url::form_urlencoded::byte_serialize(actual_id.as_bytes()).collect();
    let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
    inline_data=data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string();
    inline_data.as_str()
@@ -459,17 +477,16 @@ pub async fn gmail_preview_attachment(app:tauri::AppHandle,id:String,part_id:Str
  tauri::async_runtime::spawn_blocking(move||{
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   let message=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
-  let mut known=Vec::new();gmail_attachment_parts(&message["payload"],&mut known);
-  let attachment=known.iter().find(|a|a.part_id==part_id).ok_or("المرفق لا ينتمي للرسالة")?;
-  let mime=attachment.mime.to_ascii_lowercase();
+  let attachment=gmail_verified_part(&message,&part_id)?;
+  let mime=attachment["mimeType"].as_str().unwrap_or("application/octet-stream").to_ascii_lowercase();
   if !matches!(mime.as_str(),"image/jpeg"|"image/png"|"image/gif"|"image/webp"|"application/pdf"){
    return Err("المعاينة غير متاحة لهذا النوع؛ يمكنك تنزيل الملف".into())
   }
-  if attachment.size>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
-  let encoded=if let Some(inline_part)=part_id.strip_prefix("inline:"){
-   gmail_find_inline(&message["payload"],inline_part).ok_or("تعذر قراءة المرفق الداخلي")?.to_string()
+  if attachment["body"]["size"].as_i64().unwrap_or(0)>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
+  let encoded=if let Some(data)=attachment["body"]["data"].as_str(){data.to_string()
   }else{
-   let encoded_id:String=url::form_urlencoded::byte_serialize(part_id.as_bytes()).collect();
+   let actual_id=attachment["body"]["attachmentId"].as_str().ok_or("معرّف التحميل غير متاح")?;
+   let encoded_id:String=url::form_urlencoded::byte_serialize(actual_id.as_bytes()).collect();
    let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
    data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string()
   };
@@ -645,8 +662,8 @@ mod gmail_live_tests {
   ]});
   let mut result=Vec::new();gmail_attachment_parts(&data,&mut result);
   assert_eq!(result.len(),2);
-  assert_eq!(result[0].part_id,"inline:0.1");
-  assert_eq!(result[1].part_id,"file-123");
+  assert_eq!(result[0].part_id,"part:0.1");
+  assert_eq!(result[1].part_id,"part:0.2");
   assert_eq!(gmail_find_inline(&data,"0.1"),Some("aGVsbG8"));
  }
  #[test]
