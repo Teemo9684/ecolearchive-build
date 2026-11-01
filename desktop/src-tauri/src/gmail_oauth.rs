@@ -316,3 +316,86 @@ pub async fn gmail_read_message(app:tauri::AppHandle,id:String)->Result<String,S
   Ok(gmail_plain_text(&data["payload"]).unwrap_or_else(||data["snippet"].as_str().unwrap_or("لا يوجد نص عادي متاح لهذه الرسالة").into()))
  }).await.map_err(|e|e.to_string())?
 }
+
+#[derive(Deserialize)]
+pub struct OutgoingAttachment {name:String,mime:String,data:String}
+#[derive(Serialize)]
+pub struct GmailAttachment {part_id:String,name:String,mime:String,size:i64}
+fn gmail_attachment_parts(node:&serde_json::Value,out:&mut Vec<GmailAttachment>){
+ if let (Some(name),Some(part_id))=(node["filename"].as_str(),node["partId"].as_str()){
+  if !name.is_empty(){out.push(GmailAttachment{part_id:part_id.into(),name:name.into(),mime:node["mimeType"].as_str().unwrap_or("application/octet-stream").into(),size:node["body"]["size"].as_i64().unwrap_or(0)})}
+ }
+ if let Some(parts)=node["parts"].as_array(){for part in parts{gmail_attachment_parts(part,out)}}
+}
+#[tauri::command]
+pub async fn gmail_message_attachments(app:tauri::AppHandle,id:String)->Result<Vec<GmailAttachment>,String>{
+ if !safe_message_id(&id){return Err("معرّف الرسالة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
+  let mut out=Vec::new();gmail_attachment_parts(&data["payload"],&mut out);Ok(out)
+ }).await.map_err(|e|e.to_string())?
+}
+fn safe_message_id(value:&str)->bool{!value.is_empty()&&value.len()<=128&&value.chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_')}
+fn safe_filename(name:&str)->String{
+ let clean=name.chars().map(|c|if c.is_control()||"\\/:*?\"<>|".contains(c){'_'}else{c}).collect::<String>();
+ let clean=clean.trim_matches(|c|c=='.'||c==' ').chars().take(120).collect::<String>();
+ if clean.is_empty(){"attachment.bin".into()}else{clean}
+}
+#[tauri::command]
+pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:String,name:String)->Result<String,String>{
+ if !safe_message_id(&id)||!safe_message_id(&part_id){return Err("معرّف المرفق غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  // Verify this part belongs to the message before downloading.
+  let message=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
+  let mut known=Vec::new();gmail_attachment_parts(&message["payload"],&mut known);
+  if !known.iter().any(|a|a.part_id==part_id&&a.name==name){return Err("المرفق لا ينتمي للرسالة".into())}
+  let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{part_id}"))?;
+  let encoded=data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?;
+  let bytes=URL_SAFE_NO_PAD.decode(encoded).map_err(|_|"ترميز المرفق غير صالح")?;
+  if bytes.len()>25*1024*1024{return Err("المرفق أكبر من الحد المسموح 25MB".into())}
+  let dir=app.path().document_dir().map_err(|e|e.to_string())?.join("EcoleArchive").join("Gmail");
+  fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+  let filename=safe_filename(&name);
+  let path=(0..1000).map(|i|if i==0{dir.join(&filename)}else{dir.join(format!("{i}-{filename}"))})
+   .find(|p|!p.exists()).ok_or("تعذر تخصيص اسم للمرفق")?;
+  fs::write(&path,bytes).map_err(|e|e.to_string())?;
+  Ok(path.to_string_lossy().to_string())
+ }).await.map_err(|e|e.to_string())?
+}
+fn mime_safe(s:&str)->String{s.chars().filter(|c|c.is_ascii_alphanumeric()||"/.+-".contains(*c)).take(80).collect()}
+fn mail_header(s:&str)->String{s.chars().filter(|c|*c!='\r'&&*c!='\n'&& !c.is_control()).collect()}
+#[tauri::command]
+pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,body:String,attachments:Vec<OutgoingAttachment>)->Result<String,String>{
+ let recipient=mail_header(to.trim());
+ if recipient.is_empty()||recipient.len()>320||!recipient.contains('@')||recipient.contains(' '){return Err("عنوان المرسل إليه غير صالح".into())}
+ if subject.len()>500||body.len()>1000000||attachments.len()>10{return Err("حجم الرسالة أو عدد المرفقات تجاوز الحد".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let boundary=format!("ecolearchive-{}",rand::random::<u64>());
+  let mut msg=format!("To: {recipient}\r\nSubject: {}\r\nMIME-Version: 1.0\r\n",mail_header(&subject));
+  if attachments.is_empty(){
+   msg.push_str("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
+   msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
+  }else{
+   msg.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"));
+   msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
+   for a in attachments{
+    let bytes=base64::engine::general_purpose::STANDARD.decode(&a.data).map_err(|_|"ترميز مرفق الإرسال غير صالح")?;
+    if bytes.len()>15*1024*1024||msg.len()+bytes.len()*2>22*1024*1024{return Err("حجم مرفقات الإرسال كبير جدًا".into())}
+    let name=safe_filename(&a.name);
+    let mime=mime_safe(&a.mime);
+    msg.push_str(&format!("\r\n--{boundary}\r\nContent-Type: {}; name=\"{}\"\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n",if mime.is_empty(){"application/octet-stream"}else{&mime},name,name));
+    msg.push_str(&base64::engine::general_purpose::STANDARD.encode(bytes));
+   }
+   msg.push_str(&format!("\r\n--{boundary}--\r\n"));
+  }
+  let raw=URL_SAFE_NO_PAD.encode(msg.as_bytes());
+  let response=http.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send").bearer_auth(&token)
+    .json(&serde_json::json!({"raw":raw})).send().map_err(|e|format!("فشل اتصال إرسال Gmail: {}",network_error_kind(&e)))?;
+  if !response.status().is_success(){return Err(format!("رفض Gmail إرسال الرسالة (HTTP {})",response.status()))}
+  let result:serde_json::Value=response.json().map_err(|_|"رد Gmail بعد الإرسال غير صالح")?;
+  result["id"].as_str().map(str::to_owned).ok_or("لم يؤكد Gmail معرّف الرسالة المرسلة".into())
+ }).await.map_err(|e|e.to_string())?
+}
