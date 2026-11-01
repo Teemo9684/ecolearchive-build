@@ -99,11 +99,12 @@ export function EmailCenter() {
   const folderCache=useRef<Record<string,GmailPage>>({});
   const folderFetching=useRef<Set<string>>(new Set());
   const accountRef=useRef<string|null>(null);
-  const refreshIndex=useRef(0);
+  const quotaPauseUntilRef=useRef(0);
   const keyFor=(f:Folder,q:string)=>f+"::"+(f==="DRAFTS"?"":q);
   const fetchFolder=async(f:Folder,q:string,force=false)=>{
     const key=keyFor(f,q),cached=folderCache.current[key];
     if(cached&&!force)return cached;
+    if(Date.now()<quotaPauseUntilRef.current){if(cached)return cached;throw Error("تم إيقاف طلبات Gmail مؤقتًا لحماية الحصة؛ أعد المحاولة لاحقًا.");}
     if(folderFetching.current.has(key))return cached;
     folderFetching.current.add(key);
     try{
@@ -117,6 +118,9 @@ export function EmailCenter() {
         }
       }
       return page;
+    }catch(e){
+      if(/rateLimitExceeded|userRateLimitExceeded|quotaExceeded|429|حد طلبات|عدد طلبات/i.test(String(e)))quotaPauseUntilRef.current=Date.now()+5*60_000;
+      throw e;
     }finally{folderFetching.current.delete(key);}
   };
   const [loadingMessages,setLoadingMessages]=useState(false);
@@ -160,7 +164,7 @@ export function EmailCenter() {
   useEffect(()=>{if(isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("gmail_account_status").then(v=>setGmailEmail(v as string|null)).catch(e=>toast.error(String(e)));},[]);
   useEffect(()=>{
     if(accountRef.current!==gmailEmail){
-      folderCache.current={};folderFetching.current.clear();accountRef.current=gmailEmail;refreshIndex.current=0;
+      folderCache.current={};folderFetching.current.clear();accountRef.current=gmailEmail;quotaPauseUntilRef.current=0;
     }
     if(!gmailEmail||!isDesktopRuntime()){
       setMessages([]);setSelected(null);setMailError("");setNextPageToken(null);return;
@@ -173,19 +177,6 @@ export function EmailCenter() {
       .finally(()=>{if(folderRef.current===folder&&queryRef.current===activeQuery)setLoadingMessages(false);});
   },[gmailEmail,folder,activeQuery]);
   useEffect(()=>{
-    if(!gmailEmail||!isDesktopRuntime())return;
-    let cancelled=false;
-    const preload=async()=>{
-      for(const f of folders.map(item=>item.id)){
-        if(cancelled)return;
-        if(folderCache.current[keyFor(f,"")])continue;
-        try{await fetchFolder(f,"");}catch{/* Other folders remain accessible. */}
-      }
-    };
-    void preload();
-    return ()=>{cancelled=true;};
-  },[gmailEmail]);
-  useEffect(()=>{
     inboxIdsRef.current=null;
     newInboxIdsRef.current.clear();
     inboxCheckpointRef.current=null;
@@ -196,7 +187,7 @@ export function EmailCenter() {
     if(!gmailEmail||!isDesktopRuntime()||!autoSync)return;
     let active=true;
     const sync=async()=>{
-      if(syncInFlightRef.current||document.visibilityState==="hidden"||!navigator.onLine)return;
+      if(syncInFlightRef.current||document.visibilityState==="hidden"||!navigator.onLine||Date.now()<quotaPauseUntilRef.current)return;
       syncInFlightRef.current=true;
       try{
         const snapshot=await invoke<GmailInboxState>("gmail_inbox_state");
@@ -236,20 +227,16 @@ export function EmailCenter() {
           if(notifyRef.current)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
           await fetchFolder("INBOX","",true).catch(()=>{});
         }
-        // A rotating background refresh of the other four cached folders runs
-        // approximately every 30 seconds and never blocks the next inbox check.
-        const others=folders.map(f=>f.id).filter(f=>f!=="INBOX"&&folderCache.current[keyFor(f,"")]);
-        if(others.length && refreshIndex.current++%6===0){
-          const f=others[Math.floor((refreshIndex.current-1)/6)%others.length];
-          void fetchFolder(f,"",true).catch(()=>{});
-        }
       }catch(e){
         // Temporary network issues must not interrupt reading or flood notifications.
-        if(active)setLastSynced("تعذر التحديث التلقائي");
+        if(active){
+          if(/rateLimitExceeded|userRateLimitExceeded|quotaExceeded|429|حد طلبات|عدد طلبات/i.test(String(e)))quotaPauseUntilRef.current=Date.now()+5*60_000;
+          setLastSynced("تعذر التحديث التلقائي");
+        }
       }finally{syncInFlightRef.current=false;}
     };
     void sync();
-    const timer=window.setInterval(()=>void sync(),5000);
+    const timer=window.setInterval(()=>void sync(),60_000);
     const onResume=()=>{if(document.visibilityState==="visible")void sync();};
     window.addEventListener("online",onResume);
     document.addEventListener("visibilitychange",onResume);
