@@ -11,6 +11,7 @@ import { NAV_FR } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import bookLogo from "@/assets/logo-book.png";
 import packageInfo from "../../../package.json";
+import { EmailCenter } from "@/routes/email";
 import { isDesktopRuntime } from "@/lib/db/desktop";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [dark, setDark] = useState(false);
   const [q, setQ] = useState("");
   const [installedVersion, setInstalledVersion] = useState(packageInfo.version);
+  const [emailVisited, setEmailVisited] = useState(path === "/email");
   const fr = settings.locale === "fr";
   const home = path === "/";
 
@@ -54,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => { if (isDesktopRuntime()) void window.__TAURI_INTERNALS__!.invoke("installed_app_version").then((v: unknown) => { if (typeof v === "string") setInstalledVersion(v); }).catch(() => {}); }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
+  useEffect(() => { if (path === "/email") setEmailVisited(true); }, [path]);
 
   const isActive = (to: string, label: string) =>
     to === "/" ? home : to === "/settings" ? path === "/settings" && label === "الإعدادات" : path.startsWith(to);
@@ -127,7 +130,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="gold-rule header-gold-shimmer" />
         </header>
-        <main className={cn("flex-1", home ? "p-0" : "p-4 md:p-6")}>{children}</main>
+        <main className={cn("flex-1", home ? "p-0" : "p-4 md:p-6")}>
+          <div hidden={path === "/email"}>{children}</div>
+          {emailVisited && <div hidden={path !== "/email"}><EmailCenter /></div>}
+        </main>
       </div>
     </div>
   );
