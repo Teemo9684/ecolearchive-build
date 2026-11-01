@@ -496,7 +496,7 @@ pub async fn gmail_preview_attachment(app:tauri::AppHandle,id:String,part_id:Str
    let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
    data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string()
   };
-  let bytes=gmail_decode_attachment_data(encoded)?;
+  let bytes=gmail_decode_attachment_data(&encoded)?;
   if bytes.len()>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
   let valid=match mime.as_str(){
    "application/pdf"=>bytes.starts_with(b"%PDF-"),
