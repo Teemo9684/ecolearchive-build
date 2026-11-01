@@ -1,6 +1,7 @@
 import "@fontsource/aref-ruqaa/700.css";
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { useGmailUnreadCount } from "@/lib/gmail-unread";
+import { checkDesktopUpdateNow, useAvailableDesktopUpdate } from "@/lib/desktop-update-alert";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -42,7 +43,7 @@ function Dashboard() {
   const [q, setQ] = useState("");
   const [infoOpen, setInfoOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [availableUpdate, setAvailableUpdate] = useState<string | null>(null);
+  const availableUpdate = useAvailableDesktopUpdate();
   const [updateBusy,setUpdateBusy]=useState(false);
   const [downloadProgress,setDownloadProgress]=useState<{downloaded:number;total:number|null;phase:string}|null>(null);
   const [now, setNow] = useState<Date | null>(null);
@@ -53,23 +54,8 @@ function Dashboard() {
 
   useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
   useEffect(() => {
-    if (!isDesktopRuntime()) return;
-    let active = true;
-    const check = () => {
-      window.__TAURI_INTERNALS__!.invoke("check_desktop_update")
-        .then((v: unknown) => { if (active) setAvailableUpdate(typeof v === "string" && v ? v : null); })
-        .catch(() => { /* offline or updater unavailable: preserve existing alerts */ });
-    };
-    check();
-    const timer = window.setInterval(check, 30 * 1000);
-    const onFocus=()=>check();
-    window.addEventListener("focus",onFocus);
-    document.addEventListener("visibilitychange",onFocus);
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onFocus); };
-  }, []);
-  useEffect(() => {
-    if(alertsOpen && isDesktopRuntime())void window.__TAURI_INTERNALS__!.invoke("check_desktop_update").then(v=>setAvailableUpdate(typeof v==="string" && v?v:null)).catch(()=>{});
-  },[alertsOpen]);
+    if (alertsOpen) void checkDesktopUpdateNow();
+  }, [alertsOpen]);
   useEffect(() => {
     if (!infoOpen && !alertsOpen) return;
     const onKey = (event: KeyboardEvent) => {
