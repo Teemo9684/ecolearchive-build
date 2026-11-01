@@ -526,7 +526,24 @@ pub async fn gmail_update_message(app:tauri::AppHandle,id:String,action:String)-
       .json(&serde_json::json!({"removeLabelIds":["INBOX"]})).send(),
    _=>return Err("عملية Gmail غير مدعومة".into()),
   }.map_err(|e|format!("خطأ الاتصال عند تحديث Gmail: {}",network_error_kind(&e)))?;
-  if !response.status().is_success(){return Err(format!("رفض Gmail العملية (HTTP {}). قد يلزم إعادة ربط الحساب للسماح بتعديل الرسائل.",response.status()))}
+  if !response.status().is_success(){
+    let status=response.status();
+    let body:serde_json::Value=response.json().unwrap_or_default();
+    let reason=body["error"]["errors"].as_array()
+      .and_then(|errors|errors.iter().find_map(|entry|entry["reason"].as_str()))
+      .or_else(||body["error"]["details"].as_array().and_then(|details|details.iter().find_map(|entry|entry["reason"].as_str())))
+      .unwrap_or("");
+    let guidance=match reason {
+      "insufficientPermissions"|"ACCESS_TOKEN_SCOPE_INSUFFICIENT" => "صلاحية gmail.modify غير ممنوحة للحساب. افصل حساب Gmail من البرنامج وأعد ربطه ثم وافق على صلاحيات تعديل البريد.",
+      "accessNotConfigured"|"serviceDisabled"|"SERVICE_DISABLED" => "خدمة Gmail API غير مفعّلة في مشروع Google Cloud المرتبط بهذا الحساب.",
+      "domainPolicy" => "سياسة Google Workspace تمنع تعديل البريد عبر Gmail API.",
+      "rateLimitExceeded"|"userRateLimitExceeded"|"quotaExceeded" => "تم بلوغ حد طلبات Gmail مؤقتًا؛ أعد المحاولة بعد قليل.",
+      _ if status.as_u16()==403 => "Google رفض تعديل الرسالة. تحقق من صلاحية gmail.modify وأعد ربط الحساب إذا لم تمنح صلاحية التعديل.",
+      _ => "تعذر تعديل الرسالة في Gmail."
+    };
+    let safe_reason=reason.chars().filter(|c|c.is_ascii_alphanumeric()||*c=='_').take(64).collect::<String>();
+    return Err(format!("{guidance} (HTTP {status}{})",if safe_reason.is_empty(){String::new()}else{format!(", السبب: {safe_reason}")}));
+   }
   Ok(())
  }).await.map_err(|e|e.to_string())?
 }
