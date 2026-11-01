@@ -113,6 +113,17 @@ function EmailCenter() {
     }catch(e){toast.error("تعذر تنزيل المرفق: "+String(e));}
     finally{setDownloading("");}
   };
+  const draftAction=async(action:"SEND"|"DELETE")=>{
+    if(!selected?.draft_id)return;
+    if(action==="DELETE"&&!confirm("هل تريد حذف هذه المسودة نهائيًا من Gmail؟"))return;
+    setSending(true);
+    try{
+      await invoke<void>("gmail_draft_action",{id:selected.draft_id,action});
+      toast.success(action==="SEND"?"تم إرسال المسودة عبر Gmail":"تم حذف المسودة");
+      setSelected(null);await refreshMessages();
+    }catch(e){toast.error(String(e));}
+    finally{setSending(false);}
+  };
   const manageMessage=async(action:"READ"|"UNREAD"|"STAR"|"UNSTAR"|"TRASH"|"RESTORE"|"ARCHIVE")=>{
     if(!selected)return;
     try{
@@ -203,7 +214,10 @@ function EmailCenter() {
             <p className="text-xs text-muted-foreground" dir="ltr">{selected.date}</p>
             {selected.has_attachments&&<p className="text-xs text-muted-foreground">الرسالة تحتوي على مرفقات.</p>}
             {downloadList.map(a=><button key={a.part_id} disabled={!!downloading} className="flex w-full items-center gap-2 rounded-lg border p-2 text-right text-sm" onClick={()=>void downloadAttachment(a)}><Paperclip className="h-4 w-4"/>{a.name} — {Math.round(a.size/1024)} KB {downloading===a.part_id?"(جارٍ التنزيل…)":"(تنزيل)"}</button>)}
-            <div className="flex flex-wrap gap-2 border-t pt-3 text-sm">
+            {selected.draft_id?<div className="flex flex-wrap gap-2 border-t pt-3 text-sm">
+              <button disabled={sending} onClick={()=>void draftAction("SEND")} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground">إرسال المسودة</button>
+              <button disabled={sending} onClick={()=>void draftAction("DELETE")} className="rounded-lg border px-3 py-2">حذف المسودة</button>
+            </div>:<div className="flex flex-wrap gap-2 border-t pt-3 text-sm">
               <button onClick={reply} className="rounded-lg border px-3 py-2">رد</button>
               <button onClick={forward} className="rounded-lg border px-3 py-2">إعادة توجيه</button>
               <button onClick={()=>void manageMessage("READ")} className="rounded-lg border px-3 py-2">تحديد كمقروء</button>
@@ -225,7 +239,7 @@ function EmailCenter() {
         <label className="block text-sm">الرسالة<textarea className="field-select mt-1 min-h-48 w-full" value={body} onChange={e=>setBody(e.target.value)}/></label>
         <label className="block text-sm">إرفاق ملفات (حتى 10 ملفات، 15MB للملف الواحد)<input type="file" multiple className="mt-2 block w-full text-sm" onChange={e=>void addFiles(e.target.files)}/></label>
         {files.map((a,i)=><div key={i} className="flex items-center justify-between rounded-lg border p-2 text-sm"><span>{a.name}</span><button onClick={()=>setFiles(v=>v.filter((_,j)=>j!==i))} title="حذف المرفق"><X className="h-4 w-4"/></button></div>)}
-        <div className="flex justify-end gap-2"><button onClick={draft} className="rounded-lg border px-4 py-2">إغلاق</button><button disabled={!gmailEmail||sending} onClick={()=>void sendMail()} className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50"><Send className="inline h-4 w-4"/> {sending?"جارٍ الإرسال…":"إرسال"}</button></div>
+        <div className="flex justify-end gap-2"><button onClick={draft} className="rounded-lg border px-4 py-2">إغلاق</button><button disabled={!gmailEmail||sending} onClick={()=>void saveDraft()} className="rounded-lg border px-4 py-2 disabled:opacity-50">حفظ كمسودة</button><button disabled={!gmailEmail||sending} onClick={()=>void sendMail()} className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50"><Send className="inline h-4 w-4"/> {sending?"جارٍ الإرسال…":"إرسال"}</button></div>
       </div>
     </div>}
   </section>;
