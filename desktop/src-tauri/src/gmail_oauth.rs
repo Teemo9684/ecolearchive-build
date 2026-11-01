@@ -429,6 +429,13 @@ pub async fn gmail_message_attachments(app:tauri::AppHandle,id:String)->Result<V
   let mut out=Vec::new();gmail_attachment_parts(&data["payload"],&mut out);Ok(out)
  }).await.map_err(|e|e.to_string())?
 }
+// Gmail returns RFC 4648 base64url data, either padded or unpadded.
+// Accept both valid encodings; reject malformed content rather than silently stripping bytes.
+fn gmail_decode_attachment_data(encoded:&str)->Result<Vec<u8>,String>{
+ URL_SAFE_NO_PAD.decode(encoded)
+  .or_else(|_|base64::engine::general_purpose::URL_SAFE.decode(encoded))
+  .map_err(|_|"ترميز المرفق غير صالح".to_string())
+}
 fn safe_message_id(value:&str)->bool{!value.is_empty()&&value.len()<=128&&value.chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_')}
 fn safe_filename(name:&str)->String{
  let clean=name.chars().map(|c|if c.is_control()||"\\/:*?\"<>|".contains(c){'_'}else{c}).collect::<String>();
@@ -456,7 +463,7 @@ pub async fn gmail_download_attachment(app:tauri::AppHandle,id:String,part_id:St
    inline_data=data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string();
    inline_data.as_str()
   };
-  let bytes=URL_SAFE_NO_PAD.decode(encoded).map_err(|_|"ترميز المرفق غير صالح")?;
+  let bytes=gmail_decode_attachment_data(encoded)?;
   if bytes.len()>25*1024*1024{return Err("المرفق أكبر من الحد المسموح 25MB".into())}
   let dir=app.path().document_dir().map_err(|e|e.to_string())?.join("EcoleArchive").join("Gmail");
   fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
@@ -489,7 +496,7 @@ pub async fn gmail_preview_attachment(app:tauri::AppHandle,id:String,part_id:Str
    let data=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}/attachments/{encoded_id}"))?;
    data["data"].as_str().ok_or("Google لم يرجع بيانات المرفق")?.to_string()
   };
-  let bytes=URL_SAFE_NO_PAD.decode(encoded).map_err(|_|"ترميز المرفق غير صالح")?;
+  let bytes=gmail_decode_attachment_data(encoded)?;
   if bytes.len()>12*1024*1024{return Err("الملف كبير للمعاينة؛ يمكنك تنزيله".into())}
   let valid=match mime.as_str(){
    "application/pdf"=>bytes.starts_with(b"%PDF-"),
@@ -761,4 +768,23 @@ pub async fn gmail_inbox_state(app:tauri::AppHandle)->Result<GmailInboxState,Str
   let unread_count=labels["messagesUnread"].as_i64().unwrap_or(0).max(0);
   Ok(GmailInboxState{ids,unread_count})
  }).await.map_err(|e|e.to_string())?
+}
+
+#[cfg(test)]
+mod gmail_attachment_encoding_tests {
+ use super::*;
+ #[test]
+ fn accepts_padded_and_unpadded_gmail_base64url(){
+  for input in ["SGVsbG8", "SGVsbG8=", "SGVsbG8="] {
+   assert_eq!(gmail_decode_attachment_data(input).unwrap(),b"Hello");
+  }
+  assert_eq!(gmail_decode_attachment_data("_-4").unwrap(),vec![255,238]);
+  assert_eq!(gmail_decode_attachment_data("_-4=").unwrap(),vec![255,238]);
+ }
+ #[test]
+ fn rejects_invalid_attachment_encoding(){
+  for input in ["%%%","SGVsbG8===", "SGVs bG8="] {
+   assert!(gmail_decode_attachment_data(input).is_err());
+  }
+ }
 }
