@@ -146,7 +146,7 @@ fn connect_blocking(app:&tauri::AppHandle,client_id:&str)->Result<String,String>
  auth.query_pairs_mut()
   .append_pair("client_id",client_id).append_pair("redirect_uri",&redirect)
   .append_pair("response_type","code")
-  .append_pair("scope","openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send")
+  .append_pair("scope","openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send")
   .append_pair("access_type","offline").append_pair("prompt","consent")
   .append_pair("code_challenge",&challenge).append_pair("code_challenge_method","S256")
   .append_pair("state",&state);
@@ -230,7 +230,7 @@ fn open_browser(_link:&str)->Result<(),String>{Err("Requires Windows".into())}
 #[derive(Serialize)]
 pub struct GmailItem {
  id:String, thread_id:String, subject:String, sender:String, date:String,
- snippet:String, unread:bool, has_attachments:bool,
+ snippet:String, unread:bool, has_attachments:bool, message_id:String,
 }
 fn gmail_http()->Result<reqwest::blocking::Client,String>{
  reqwest::blocking::Client::builder()
@@ -297,7 +297,7 @@ pub async fn gmail_list_messages(app:tauri::AppHandle,folder:String)->Result<Vec
      id:id.into(),thread_id:detail["threadId"].as_str().unwrap_or("").into(),
      sender:gmail_headers(&detail,"From"),subject:gmail_headers(&detail,"Subject"),
      date:gmail_headers(&detail,"Date"),
-     snippet:detail["snippet"].as_str().unwrap_or("").into(),
+     snippet:detail["snippet"].as_str().unwrap_or("").into(),message_id:gmail_headers(&detail,"Message-ID"),
      unread:labels.is_some_and(|l|l.iter().any(|v|v.as_str()==Some("UNREAD"))),
      has_attachments:detail["payload"]["parts"].as_array().is_some_and(|a|a.iter().any(gmail_has_attachment))
     });
@@ -398,5 +398,31 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
   if !response.status().is_success(){return Err(format!("رفض Gmail إرسال الرسالة (HTTP {})",response.status()))}
   let result:serde_json::Value=response.json().map_err(|_|"رد Gmail بعد الإرسال غير صالح")?;
   result["id"].as_str().map(str::to_owned).ok_or("لم يؤكد Gmail معرّف الرسالة المرسلة".into())
+ }).await.map_err(|e|e.to_string())?
+}
+
+#[tauri::command]
+pub async fn gmail_update_message(app:tauri::AppHandle,id:String,action:String)->Result<(),String>{
+ if !safe_message_id(&id){return Err("معرّف الرسالة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let base=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}");
+  let response=match action.as_str(){
+   "TRASH"=>http.post(format!("{base}/trash")).bearer_auth(&token).send(),
+   "RESTORE"=>http.post(format!("{base}/untrash")).bearer_auth(&token).send(),
+   "READ"=>http.post(format!("{base}/modify")).bearer_auth(&token)
+      .json(&serde_json::json!({"removeLabelIds":["UNREAD"]})).send(),
+   "UNREAD"=>http.post(format!("{base}/modify")).bearer_auth(&token)
+      .json(&serde_json::json!({"addLabelIds":["UNREAD"]})).send(),
+   "STAR"=>http.post(format!("{base}/modify")).bearer_auth(&token)
+      .json(&serde_json::json!({"addLabelIds":["STARRED"]})).send(),
+   "UNSTAR"=>http.post(format!("{base}/modify")).bearer_auth(&token)
+      .json(&serde_json::json!({"removeLabelIds":["STARRED"]})).send(),
+   "ARCHIVE"=>http.post(format!("{base}/modify")).bearer_auth(&token)
+      .json(&serde_json::json!({"removeLabelIds":["INBOX"]})).send(),
+   _=>return Err("عملية Gmail غير مدعومة".into()),
+  }.map_err(|e|format!("خطأ الاتصال عند تحديث Gmail: {}",network_error_kind(&e)))?;
+  if !response.status().is_success(){return Err(format!("رفض Gmail العملية (HTTP {}). قد يلزم إعادة ربط الحساب للسماح بتعديل الرسائل.",response.status()))}
+  Ok(())
  }).await.map_err(|e|e.to_string())?
 }
