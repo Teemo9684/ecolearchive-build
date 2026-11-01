@@ -98,7 +98,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           {collapsed ? <ChevronsLeft className="h-4 w-4" /> : <ChevronsRight className="h-4 w-4" />}
         </button>
         <div className={cn("flex flex-col items-center text-center transition-all duration-300",collapsed ? "px-1 pb-4 pt-11 md:pt-10" : "px-4 pb-4 pt-6")}>
-          <img src={bookLogo} alt="شعار الكتاب" width={83} height={83} className={cn("block h-[4.8rem] w-[4.8rem] object-contain drop-shadow-xl logo-3d-spin transition-[width,height] duration-300",collapsed ? "md:h-12 md:w-12" : "md:h-[5.2rem] md:w-[5.2rem]")} />
+          <div className={cn("sidebar-book-3d logo-3d-spin relative h-[4.8rem] w-[4.8rem] shrink-0 transition-[width,height] duration-300",collapsed ? "md:h-12 md:w-12" : "md:h-[5.2rem] md:w-[5.2rem]")}>
+            <img src={bookLogo} alt="شعار الكتاب" width={83} height={83} className="sidebar-book-3d-base block h-full w-full object-contain" />
+            <span aria-hidden="true" className="sidebar-book-3d-metal absolute inset-0" style={{WebkitMaskImage:`url("${bookLogo}")`,maskImage:`url("${bookLogo}")`}} />
+            <span aria-hidden="true" className="sidebar-book-3d-shine absolute inset-0" style={{WebkitMaskImage:`url("${bookLogo}")`,maskImage:`url("${bookLogo}")`}} />
+          </div>
           <div className={cn("mt-2 font-display text-[16px] font-bold leading-snug",collapsed && "md:hidden")}>منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
           <div className={cn("gold-rule header-gold-shimmer mt-4 opacity-70",collapsed ? "w-10" : "w-3/4")} />
         </div>
