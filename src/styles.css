@@ -416,7 +416,7 @@
 .ecole-ticker-track { animation: ecole-ticker-motion 18s linear infinite; }
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
-@keyframes ecole-ticker-motion { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+@keyframes ecole-ticker-motion { from { transform: translate3d(0,0,0); } to { transform: translate3d(50%,0,0); } }
 @media (prefers-reduced-motion: reduce) { .ecole-ticker-track { animation: none; } }
 
 /* Premium metallic relief for the original sidebar book and quill. No new drawing or backdrop. */
