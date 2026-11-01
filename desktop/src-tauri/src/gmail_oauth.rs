@@ -322,7 +322,7 @@ pub struct OutgoingAttachment {name:String,mime:String,data:String}
 #[derive(Serialize)]
 pub struct GmailAttachment {part_id:String,name:String,mime:String,size:i64}
 fn gmail_attachment_parts(node:&serde_json::Value,out:&mut Vec<GmailAttachment>){
- if let (Some(name),Some(part_id))=(node["filename"].as_str(),node["partId"].as_str()){
+ if let (Some(name),Some(part_id))=(node["filename"].as_str(),node["body"]["attachmentId"].as_str()){
   if !name.is_empty(){out.push(GmailAttachment{part_id:part_id.into(),name:name.into(),mime:node["mimeType"].as_str().unwrap_or("application/octet-stream").into(),size:node["body"]["size"].as_i64().unwrap_or(0)})}
  }
  if let Some(parts)=node["parts"].as_array(){for part in parts{gmail_attachment_parts(part,out)}}
@@ -374,7 +374,8 @@ pub async fn gmail_send_message(app:tauri::AppHandle,to:String,subject:String,bo
  tauri::async_runtime::spawn_blocking(move||{
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   let boundary=format!("ecolearchive-{}",rand::random::<u64>());
-  let mut msg=format!("To: {recipient}\r\nSubject: {}\r\nMIME-Version: 1.0\r\n",mail_header(&subject));
+  let encoded_subject=if subject.is_ascii(){mail_header(&subject)}else{format!("=?UTF-8?B?{}?=",base64::engine::general_purpose::STANDARD.encode(subject.as_bytes()))};
+  let mut msg=format!("To: {recipient}\r\nSubject: {encoded_subject}\r\nMIME-Version: 1.0\r\n");
   if attachments.is_empty(){
    msg.push_str("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
    msg.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
