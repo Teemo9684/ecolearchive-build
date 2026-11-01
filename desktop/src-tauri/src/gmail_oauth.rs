@@ -546,3 +546,46 @@ mod gmail_live_tests {
   assert!(encoded.split("\r\n").all(|line|line.len()<=76));
  }
 }
+
+#[derive(Serialize)]
+pub struct GmailPage { items:Vec<GmailItem>, next_page_token:Option<String> }
+#[tauri::command]
+pub async fn gmail_search_messages(app:tauri::AppHandle,folder:String,query:String,page_token:Option<String>)->Result<GmailPage,String>{
+ if query.len()>250||query.chars().any(char::is_control){return Err("عبارة البحث طويلة أو غير صالحة".into())}
+ if page_token.as_ref().is_some_and(|t|t.len()>2000||t.chars().any(char::is_control)){return Err("رمز الصفحة غير صالح".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  if folder=="DRAFTS"{
+   if page_token.is_some(){return Ok(GmailPage{items:Vec::new(),next_page_token:None})}
+   // Drafts have a separate Gmail endpoint; reuse the existing draft listing logic.
+   return Err("استعمل مجلد المسودات لعرض المسودات".into());
+  }
+  let label=match folder.as_str(){"INBOX"|"SENT"|"STARRED"|"TRASH"=>folder.as_str(),_=>return Err("مجلد غير معروف".into())};
+  let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
+  let mut url=url::Url::parse("https://gmail.googleapis.com/gmail/v1/users/me/messages").map_err(|e|e.to_string())?;
+  {
+   let mut pairs=url.query_pairs_mut();
+   pairs.append_pair("labelIds",label).append_pair("maxResults","30");
+   if !query.trim().is_empty(){pairs.append_pair("q",query.trim());}
+   if let Some(ref next)=page_token{pairs.append_pair("pageToken",next);}
+  }
+  let listing=gmail_get_json(&http,&token,url.as_str())?;
+  let mut items=Vec::new();
+  if let Some(messages)=listing["messages"].as_array(){
+   for msg in messages{
+    let Some(id)=msg["id"].as_str()else{continue};
+    if !safe_message_id(id){continue}
+    let detail=gmail_get_json(&http,&token,&format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full"))?;
+    let labels=detail["labelIds"].as_array();
+    items.push(GmailItem{
+     id:id.into(),thread_id:detail["threadId"].as_str().unwrap_or("").into(),
+     sender:gmail_headers(&detail,"From"),subject:gmail_headers(&detail,"Subject"),
+     date:gmail_headers(&detail,"Date"),snippet:detail["snippet"].as_str().unwrap_or("").into(),
+     unread:labels.is_some_and(|l|l.iter().any(|v|v.as_str()==Some("UNREAD"))),
+     has_attachments:detail["payload"]["parts"].as_array().is_some_and(|a|a.iter().any(gmail_has_attachment)),
+     message_id:gmail_headers(&detail,"Message-ID"),draft_id:None
+    });
+   }
+  }
+  Ok(GmailPage{items,next_page_token:listing["nextPageToken"].as_str().map(str::to_owned)})
+ }).await.map_err(|e|e.to_string())?
+}
