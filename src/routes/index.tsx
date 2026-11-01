@@ -1,5 +1,6 @@
 import "@fontsource/aref-ruqaa/700.css";
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
+import { useGmailUnreadCount } from "@/lib/gmail-unread";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -93,6 +94,7 @@ function Dashboard() {
   const outCount = liveCorr.filter((c) => c.direction === "out").length;
   const staffCount = employees.data.filter((s) => !s.deletedAt).length + teachers.data.filter((s) => !s.deletedAt).length;
   const pendingIn = useIncomingAlerts(corr.data, "/");
+  const gmailUnread = useGmailUnreadCount();
 
   const recent = [...liveDocs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const corrById = new Map(liveCorr.map((c) => [c.id, c]));
@@ -169,7 +171,8 @@ function Dashboard() {
                   <div className="font-bold">مراسلات واردة تنتظر المعالجة: {pendingIn}</div>
                   <button onClick={() => { setAlertsOpen(false); navigate({ to: "/mail/incoming" }); }} className="mt-2 text-sm text-primary underline">فتح البريد الوارد</button>
                 </div>}
-                {!availableUpdate && pendingIn === 0 && <p className="rounded-xl bg-muted p-4 text-sm">لا توجد تنبيهات جديدة.</p>}
+                {gmailUnread > 0 && <div className="rounded-xl border p-4"><div className="font-bold">رسائل Gmail غير مقروءة: {gmailUnread}</div><button onClick={() => { setAlertsOpen(false); navigate({ to: "/email" }); }} className="mt-2 text-sm text-primary underline">فتح البريد الإلكتروني</button></div>}
+                {!availableUpdate && pendingIn === 0 && gmailUnread === 0 && <p className="rounded-xl bg-muted p-4 text-sm">لا توجد تنبيهات جديدة.</p>}
               </div>
             )}
           </section>
@@ -206,7 +209,7 @@ function Dashboard() {
               </form>
               <button type="button" onClick={() => setAlertsOpen(true)} aria-label="التنبيهات" className="glass relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition hover:ring-2 hover:ring-gold/60">
                 <Bell className="h-5 w-5" />
-                {(pendingIn > 0 || availableUpdate) && <span className="absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[11px] font-bold text-destructive-foreground ring-2 ring-sidebar">{pendingIn + (availableUpdate ? 1 : 0)}</span>}
+                {(pendingIn > 0 || gmailUnread > 0 || availableUpdate) && <span className="absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[11px] font-bold text-destructive-foreground ring-2 ring-sidebar">{pendingIn + gmailUnread + (availableUpdate ? 1 : 0)}</span>}
               </button>
               <button type="button" onClick={() => setInfoOpen(true)} className="glass hidden h-11 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-semibold transition hover:ring-2 hover:ring-gold/60 sm:flex">
                 <UserRound className="h-5 w-5" />المديرة<ChevronDown className="h-4 w-4" />
