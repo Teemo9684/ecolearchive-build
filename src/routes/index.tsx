@@ -14,6 +14,7 @@ import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence, DocumentRecord, Staff } from "@/lib/db/types";
 import hero from "@/assets/hero-school.jpg";
 import approvedLogo from "@/assets/school-logo.png";
+import bookLogo from "@/assets/logo-book.png";
 import { LovableSchoolLogo } from "@/components/app/LovableSchoolLogo";
 import { cn } from "@/lib/utils";
 import { isDesktopRuntime } from "@/lib/db/desktop";
@@ -112,6 +113,15 @@ function Dashboard() {
     .slice(0, 4);
   const taskTone = (c: Correspondence) => (c.priority === "very_urgent" ? "tone-pink" : c.priority === "urgent" ? "tone-gold" : c.direction === "in" ? "tone-blue" : "tone-green");
 
+  const tickerItems: { text: string; to: string }[] = [
+    ...(availableUpdate ? [{ text: `تحديث جديد للمنظومة: الإصدار ${availableUpdate}`, to: "/" }] : []),
+    ...(pendingIn > 0 ? [{ text: `${pendingIn} مراسلات واردة جديدة تستحق المتابعة`, to: "/mail/incoming" }] : []),
+    ...(gmailUnread > 0 ? [{ text: `${gmailUnread} رسائل بريد إلكتروني غير مقروءة`, to: "/email" }] : []),
+    ...(tasks.length > 0 ? [{ text: `${tasks.length} مراسلات معلقة من أحدث المهام`, to: "/mail/incoming" }] : []),
+    ...(liveDocs.length > 0 ? [{ text: `الأرشيف الرقمي يحتوي على ${liveDocs.length} وثيقة محفوظة`, to: "/archive" }] : []),
+    { text: `السنة الدراسية ${settings.currentYear}`, to: "/" },
+  ];
+
   const dateStr = now ? new Intl.DateTimeFormat("ar-DZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now) : "";
   const timeStr = now ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(now) : "";
 
@@ -208,6 +218,23 @@ function Dashboard() {
             <div className="glass flex min-h-10 items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold">
               <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-success" />
               <span>السنة الدراسية {settings.currentYear}</span>
+            </div>
+          </div>
+        </div>
+        {/* Glass ticker is embedded inside the hero, flush with its lower edge. */}
+        <div className="absolute inset-x-0 bottom-0 z-10 flex h-10 items-center border-t border-white/20 bg-white/[0.09] text-white shadow-[0_-3px_20px_rgba(0,0,0,.12)] backdrop-blur-xl">
+          <div className="relative z-20 flex h-full shrink-0 items-center gap-2 border-e border-white/20 bg-slate-950/30 px-3 text-xs font-semibold text-amber-200 md:px-5">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden="true" />
+            <span>آخر المستجدات</span>
+          </div>
+          <div className="ecole-ticker-viewport min-w-0 flex-1 overflow-hidden" aria-label="مستجدات المنظومة">
+            <div className="ecole-ticker-track flex w-max items-center">
+              {[0,1].map(copy => <div key={copy} className="flex shrink-0 items-center">
+                {tickerItems.map((item,i) => <div key={`${copy}-${i}`} className="flex shrink-0 items-center">
+                  <button type="button" className="whitespace-nowrap px-4 text-xs font-medium text-slate-50 transition-colors hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300" onClick={() => item.to === "/" && availableUpdate && i===0 ? setAlertsOpen(true) : navigate({to:item.to as "/"})}>{item.text}</button>
+                  <img src={bookLogo} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
+                </div>)}
+              </div>)}
             </div>
           </div>
         </div>
