@@ -69,4 +69,4 @@ jobs:
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
       - name: Run OAuth unit tests
         shell: pwsh
-        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib oauth_tests
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib
