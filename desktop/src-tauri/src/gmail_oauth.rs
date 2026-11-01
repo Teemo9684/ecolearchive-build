@@ -696,7 +696,7 @@ pub async fn gmail_search_messages(app:tauri::AppHandle,folder:String,query:Stri
   let mut url=url::Url::parse("https://gmail.googleapis.com/gmail/v1/users/me/messages").map_err(|e|e.to_string())?;
   {
    let mut pairs=url.query_pairs_mut();
-   pairs.append_pair("labelIds",label).append_pair("maxResults","30");
+   pairs.append_pair("labelIds",label).append_pair("maxResults","15");
    if label=="TRASH"{pairs.append_pair("includeSpamTrash","true");}
    if !query.trim().is_empty(){pairs.append_pair("q",query.trim());}
    if let Some(ref next)=page_token{pairs.append_pair("pageToken",next);}
