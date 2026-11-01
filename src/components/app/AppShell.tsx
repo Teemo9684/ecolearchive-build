@@ -5,7 +5,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
-  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail, PanelRightClose, PanelRightOpen,
+  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
@@ -95,7 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <button className="absolute end-3 top-3 md:hidden" onClick={() => setOpen(false)} aria-label="إغلاق"><X className="h-5 w-5" /></button>
         <button type="button" onClick={toggleCollapsed} className="absolute end-2 top-2 z-10 hidden rounded-lg p-2 text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold md:grid" aria-label={collapsed ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية"} title={collapsed ? "توسيع القائمة" : "طي القائمة"} aria-expanded={!collapsed}>
-          {collapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+          {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
         </button>
         <div className={cn("flex flex-col items-center text-center transition-all duration-300",collapsed ? "px-1 pb-4 pt-11 md:pt-10" : "px-4 pb-4 pt-6")}>
           <img src={bookLogo} alt="شعار الكتاب" width={83} height={83} className={cn("block h-[4.8rem] w-[4.8rem] object-contain drop-shadow-xl logo-3d-spin transition-[width,height] duration-300",collapsed ? "md:h-12 md:w-12" : "md:h-[5.2rem] md:w-[5.2rem]")} />
