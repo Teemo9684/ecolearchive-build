@@ -1,4 +1,5 @@
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
+import { checkDesktopUpdateNow } from "@/lib/desktop-update-alert";
 import { useGmailUnreadCount } from "@/lib/gmail-unread";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
@@ -56,6 +57,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => { setDark(localStorage.getItem("ui-theme") === "dark"); }, []);
   useEffect(() => { if (isDesktopRuntime()) void window.__TAURI_INTERNALS__!.invoke("installed_app_version").then((v: unknown) => { if (typeof v === "string") setInstalledVersion(v); }).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!isDesktopRuntime()) return;
+    void checkDesktopUpdateNow();
+    const timer = window.setInterval(() => void checkDesktopUpdateNow(), 15_000);
+    const onResume = () => { if (document.visibilityState === "visible") void checkDesktopUpdateNow(); };
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("online", onResume);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("online", onResume);
+    };
+  }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
   useEffect(() => { if (path === "/email") setEmailVisited(true); }, [path]);
