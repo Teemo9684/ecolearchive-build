@@ -236,8 +236,8 @@ function Dashboard() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Action to="/templates" title="إنشاء وثيقة" sub="نماذج جاهزة للاستعمال" icon={FileText} tone="tone-gold" />
           <Action to="/email" title="البريد الإلكتروني" sub="إدارة بريد Gmail المدرسي" icon={Mail} tone="tone-pink" />
-          <Action to="/mail/outgoing" title="جدول إرسال" sub="إنشاء جدول إرسال" icon={Send} tone="tone-green" />
-          <Action to="/mail/incoming" title="مراسلة جديدة" sub="إنشاء مراسلة إدارية" icon={FilePlus2} tone="tone-blue" />
+          <Action to="/templates" kind="bordereau" title="جدول إرسال" sub="إنشاء جدول إرسال" icon={Send} tone="tone-green" />
+          <Action to="/templates" kind="correspondence" title="مراسلة جديدة" sub="إنشاء مراسلة إدارية" icon={FilePlus2} tone="tone-blue" />
         </div>
 
         {/* Stats */}
@@ -338,9 +338,9 @@ function greeting(d: Date | null) {
   return h < 12 ? "صباح الخير" : h < 18 ? "طاب يومك" : "مساء الخير";
 }
 
-function Action({ to, title, sub, icon: Icon, tone }: { to: string; title: string; sub: string; icon: typeof Send; tone: string }) {
+function Action({ to, kind, title, sub, icon: Icon, tone }: { to: string; kind?: "bordereau"|"correspondence"; title: string; sub: string; icon: typeof Send; tone: string }) {
   return (
-    <Link to={to} title={sub} className={cn("panel lift group relative flex items-center gap-4 overflow-hidden p-4", tone)}>
+    <Link to={to} search={kind ? {kind} : undefined} title={sub} className={cn("panel lift group relative flex items-center gap-4 overflow-hidden p-4", tone)}>
       <div className="absolute -start-10 -top-10 h-28 w-28 rounded-full opacity-10 tone-dot transition-transform duration-500 group-hover:scale-150" />
       <div className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl shadow-lg tone-solid transition-transform duration-300 group-hover:rotate-[-6deg] group-hover:scale-105"><Icon className="h-7 w-7" /></div>
       <div className="relative min-w-0 flex-1">
