@@ -90,6 +90,13 @@ function EmailCenter() {
   const [lastSynced,setLastSynced]=useState<string|null>(null);
   const inboxIdsRef=useRef<Set<string>|null>(null);
   const syncInFlightRef=useRef(false);
+  const folderRef=useRef(folder);
+  const queryRef=useRef(activeQuery);
+  const notifyRef=useRef(notifyNew);
+  folderRef.current=folder;
+  queryRef.current=activeQuery;
+  notifyRef.current=notifyNew;
+
 
   const invoke = <T,>(command:string,args?:Record<string,unknown>):Promise<T> => window.__TAURI_INTERNALS__!.invoke(command,args) as Promise<T>;
 
@@ -127,8 +134,8 @@ function EmailCenter() {
         setUnreadCount(snapshot.unread_count);
         setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
         if(arrived.length){
-          if(notifyNew)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
-          if(folder==="INBOX"&&!activeQuery){
+          if(notifyRef.current)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
+          if(folderRef.current==="INBOX"&&!queryRef.current){
             const page=await invoke<GmailPage>("gmail_search_messages",{folder:"INBOX",query:"",pageToken:null});
             if(active){setMessages(current=>[...page.items,...current.filter(item=>!page.items.some(m=>m.id===item.id))]);setNextPageToken(page.next_page_token);}
           }
@@ -144,7 +151,7 @@ function EmailCenter() {
     window.addEventListener("online",onResume);
     document.addEventListener("visibilitychange",onResume);
     return ()=>{active=false;window.clearInterval(timer);window.removeEventListener("online",onResume);document.removeEventListener("visibilitychange",onResume);};
-  },[gmailEmail,folder,activeQuery,autoSync,notifyNew]);
+  },[gmailEmail,autoSync]);
   const readMessage=async(item:GmailItem)=>{
     setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
