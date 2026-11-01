@@ -382,3 +382,26 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar-book-metal-glint { animation: none; opacity: 0; }
 }
+
+
+/* Minimal scrollbars: invisible until the scrollable area is hovered or focused.
+   Preserve discoverability for keyboard users and high-contrast environments. */
+@media (pointer: fine) and (forced-colors: none) {
+  * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  *:hover, *:focus-within { scrollbar-color: color-mix(in srgb, var(--color-sidebar-primary, #c1a46b) 60%, transparent) transparent; }
+  *::-webkit-scrollbar { width: 7px; height: 7px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: transparent;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *:hover::-webkit-scrollbar-thumb, *:focus-within::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-sidebar-primary, #c1a46b) 62%, transparent);
+  }
+  *:hover::-webkit-scrollbar-thumb:hover { background-color: var(--color-sidebar-primary, #c1a46b); }
+}
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; scrollbar-width: auto; }
+}
