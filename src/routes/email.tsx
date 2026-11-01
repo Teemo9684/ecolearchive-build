@@ -8,7 +8,8 @@ import { toast } from "sonner";
 /** The Gmail UI is intentionally disconnected until desktop OAuth is configured.
  * Never ship the Lovable cloud gateway keys or request a Google account password.
  */
-export const Route = createFileRoute("/email")({ component: EmailCenter });
+// The mailbox is mounted persistently by AppShell to preserve its state across routes.
+export const Route = createFileRoute("/email")({ component: () => null });
 type GmailInboxState = {ids:string[];unread_count:number};
 type GmailPage = {items:GmailItem[];next_page_token:string|null};
 type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string;draft_id?:string|null};
@@ -20,7 +21,7 @@ const folders: {id:Folder;label:string;icon:typeof Inbox}[] = [
   {id:"TRASH",label:"المحذوفات",icon:Trash2},
   {id:"DRAFTS",label:"المسودات",icon:Mail},
 ];
-function EmailCenter() {
+export function EmailCenter() {
   const [folder,setFolder]=useState<Folder>("INBOX");
   const [search,setSearch]=useState("");
   const [activeQuery,setActiveQuery]=useState("");
