@@ -5,7 +5,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
-  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail,
+  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
@@ -24,6 +24,8 @@ const NAV: NavItem[][] = [
     { to: "/mail/incoming", label: "البريد الوارد", icon: Inbox, badge: true },
     { to: "/mail/outgoing", label: "البريد الصادر", icon: Send },
     { to: "/email", label: "البريد الإلكتروني", icon: Mail },
+  ],
+  [
     { to: "/archive", label: "الأرشيف الرقمي", icon: FolderOpen },
     { to: "/employees", label: "عمال المؤسسة", icon: Users },
     { to: "/teachers", label: "العمال التربويون", icon: GraduationCap },
@@ -48,6 +50,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pendingIn = useIncomingAlerts(corr.data, path);
   const gmailUnread = useGmailUnreadCount();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("ecolearchive:sidebar-collapsed") === "true"; } catch { return false; } });
+  const toggleCollapsed = () => setCollapsed(current => { const next = !current; try { localStorage.setItem("ecolearchive:sidebar-collapsed", String(next)); } catch {} return next; });
   const [dark, setDark] = useState(false);
   const [q, setQ] = useState("");
   const [installedVersion, setInstalledVersion] = useState(packageInfo.version);
@@ -84,19 +88,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       {open && <div className="fixed inset-0 z-30 bg-foreground/40 md:hidden" onClick={() => setOpen(false)} />}
       <aside
         className={cn(
-          "no-print sidebar-skin fixed inset-y-0 start-0 z-40 flex w-64 flex-col text-sidebar-foreground transition-transform duration-300 md:sticky md:top-0 md:h-screen md:translate-x-0",
+          "no-print sidebar-skin fixed inset-y-0 start-0 z-40 flex w-64 flex-col text-sidebar-foreground transition-[transform,width] duration-300 md:sticky md:top-0 md:h-screen md:translate-x-0",
+          collapsed ? "md:w-[76px]" : "md:w-64",
           open ? "translate-x-0" : "translate-x-full",
         )}
       >
         <button className="absolute end-3 top-3 md:hidden" onClick={() => setOpen(false)} aria-label="إغلاق"><X className="h-5 w-5" /></button>
-        <div className="flex flex-col items-center px-4 pb-4 pt-6 text-center">
-          <img src={bookLogo} alt="شعار الكتاب" width={83} height={83} className="block h-[4.8rem] w-[4.8rem] object-contain drop-shadow-xl logo-3d-spin md:h-[5.2rem] md:w-[5.2rem]" />
-          <div className="mt-2 font-display text-[16px] font-bold leading-snug">منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
-          <div className="gold-rule header-gold-shimmer mt-4 w-3/4 opacity-70" />
+        <button type="button" onClick={toggleCollapsed} className="absolute end-2 top-2 z-10 hidden rounded-lg p-2 text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold md:grid" aria-label={collapsed ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية"} title={collapsed ? "توسيع القائمة" : "طي القائمة"} aria-expanded={!collapsed}>
+          {collapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+        </button>
+        <div className={cn("flex flex-col items-center text-center transition-all duration-300",collapsed ? "px-1 pb-4 pt-11 md:pt-10" : "px-4 pb-4 pt-6")}>
+          <img src={bookLogo} alt="شعار الكتاب" width={83} height={83} className={cn("block h-[4.8rem] w-[4.8rem] object-contain drop-shadow-xl logo-3d-spin transition-[width,height] duration-300",collapsed ? "md:h-12 md:w-12" : "md:h-[5.2rem] md:w-[5.2rem]")} />
+          <div className={cn("mt-2 font-display text-[16px] font-bold leading-snug",collapsed && "md:hidden")}>منظومة التسيير الإداري<br /><span className="gold-text">والأرشيف الرقمي</span></div>
+          <div className={cn("gold-rule header-gold-shimmer mt-4 opacity-70",collapsed ? "w-10" : "w-3/4")} />
         </div>
-        <nav className="flex-1 overflow-y-auto pb-3">
+        <nav aria-label="القائمة الجانبية" className="flex-1 overflow-y-auto pb-3">
           {NAV.map((g, gi) => (
-            <div key={gi} className={cn(gi > 0 && "mx-5 mt-2 border-t border-sidebar-border pt-2")}>
+            <div key={gi} className={cn("mt-2", gi > 0 && "border-t border-sidebar-border pt-3", collapsed ? "md:mx-2" : "mx-3")}>
+              {gi > 0 && <div className={cn("mb-2 px-3 text-[11px] font-semibold tracking-wide text-sidebar-foreground/55",collapsed && "md:sr-only")}>{fr ? ["", "Gestion et archives", "Recherche", "Paramètres"][gi] : ["", "التسيير والأرشفة", "أدوات البحث", "الإعدادات"][gi]}</div>}
               {g.map((it) => {
                 const active = isActive(it.to, it.label);
                 return (
@@ -104,25 +113,27 @@ export function AppShell({ children }: { children: ReactNode }) {
                     key={it.label}
                     to={it.to}
                     hash={it.hash}
+                    title={collapsed ? (fr ? NAV_FR[it.to] ?? it.label : it.label) : undefined}
+                    aria-label={fr ? NAV_FR[it.to] ?? it.label : it.label}
                     className={cn(
-                      "nav-soft-glow flex items-center gap-3 px-6 py-2.5 text-[15px] transition-colors hover:bg-sidebar-accent",
-                      gi > 0 && "px-1",
-                      active && "sidebar-active me-0 rounded-e-none rounded-s-none font-bold",
+                      "nav-soft-glow relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-[background-color,color,box-shadow] hover:bg-sidebar-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
+                      collapsed && "md:justify-center md:px-2",
+                      active && "bg-sidebar-accent/80 font-bold text-sidebar-foreground shadow-[inset_3px_0_0_0_#d7af67]",
                     )}
                   >
                     <it.icon className="h-5 w-5 shrink-0" />
-                    <span className="flex-1">{fr ? NAV_FR[it.to] ?? it.label : it.label}</span>
-                    {it.to === "/email" && gmailUnread > 0 && <span className="grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground" aria-label={`${gmailUnread} رسائل Gmail غير مقروءة`}>{gmailUnread}</span>}
+                    <span className={cn("min-w-0 flex-1",collapsed && "md:hidden")}>{fr ? NAV_FR[it.to] ?? it.label : it.label}</span>
+                    {it.to === "/email" && gmailUnread > 0 && <span className={cn("grid h-6 min-w-6 place-items-center rounded-full bg-destructive", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} px-1.5 text-xs font-bold text-destructive-foreground" aria-label={`${gmailUnread} رسائل Gmail غير مقروءة`}>{gmailUnread}</span>}
                     {it.badge && pendingIn > 0 && (
-                      <span className="notification-once grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground" key={pendingIn}>{pendingIn}</span>
+                      <span className={cn("notification-once grid h-6 min-w-6 place-items-center rounded-full bg-destructive", collapsed && "md:absolute md:-end-1 md:-top-1 md:h-4 md:min-w-4 md:px-1 md:text-[10px]")} px-1.5 text-xs font-bold text-destructive-foreground" key={pendingIn}>{pendingIn}</span>
                     )}
                   </Link>
                 );
               })}
             </div>
           ))}
-          <div className="mx-5 mt-2 border-t border-sidebar-border pt-2">
-            <div className="flex items-center gap-3 px-1 py-2.5 text-[15px] opacity-80"><Info className="h-5 w-5" />حول البرنامج — الإصدار {installedVersion}</div>
+          <div className={cn("mt-2 border-t border-sidebar-border pt-2",collapsed ? "md:mx-2" : "mx-3")}>
+            <div title={`حول البرنامج — الإصدار ${installedVersion}`} className={cn("flex items-center gap-3 px-3 py-2.5 text-[13px] opacity-70",collapsed && "md:justify-center md:px-1")}><Info className="h-5 w-5 shrink-0" /><span className={cn(collapsed && "md:hidden")}>حول البرنامج — الإصدار {installedVersion}</span></div>
           </div>
         </nav>
       </aside>
