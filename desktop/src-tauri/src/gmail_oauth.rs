@@ -512,8 +512,8 @@ pub async fn gmail_update_message(app:tauri::AppHandle,id:String,action:String)-
   let http=gmail_http()?;let token=gmail_access_token(&app,&http)?;
   let base=format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}");
   let response=match action.as_str(){
-   "TRASH"=>http.post(format!("{base}/trash")).bearer_auth(&token).send(),
-   "RESTORE"=>http.post(format!("{base}/untrash")).bearer_auth(&token).send(),
+   "TRASH"=>http.post(format!("{base}/trash")).bearer_auth(&token).header(reqwest::header::CONTENT_LENGTH, "0").body("").send(),
+   "RESTORE"=>http.post(format!("{base}/untrash")).bearer_auth(&token).header(reqwest::header::CONTENT_LENGTH, "0").body("").send(),
    "READ"=>http.post(format!("{base}/modify")).bearer_auth(&token)
       .json(&serde_json::json!({"removeLabelIds":["UNREAD"]})).send(),
    "UNREAD"=>http.post(format!("{base}/modify")).bearer_auth(&token)
