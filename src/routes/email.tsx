@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isDesktopRuntime } from "@/lib/db/desktop";
 import { useSettings } from "@/lib/db/hooks";
 import { Archive, Inbox, Send, Mail, Star, Trash2, Search, Paperclip, ShieldCheck, Plus, X, AlertCircle, LogOut, ChevronDown, ExternalLink } from "lucide-react";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
  * Never ship the Lovable cloud gateway keys or request a Google account password.
  */
 export const Route = createFileRoute("/email")({ component: EmailCenter });
+type GmailInboxState = {ids:string[];unread_count:number};
 type GmailPage = {items:GmailItem[];next_page_token:string|null};
 type GmailItem = {id:string;thread_id:string;subject:string;sender:string;date:string;snippet:string;unread:boolean;has_attachments:boolean;message_id:string;draft_id?:string|null};
 type Folder = "INBOX" | "STARRED" | "SENT" | "TRASH" | "DRAFTS";
@@ -83,6 +84,13 @@ function EmailCenter() {
   const [messageBody,setMessageBody]=useState("");
   const [reading,setReading]=useState(false);
   const [mailError,setMailError]=useState("");
+  const [unreadCount,setUnreadCount]=useState(0);
+  const [autoSync,setAutoSync]=useState(true);
+  const [notifyNew,setNotifyNew]=useState(true);
+  const [lastSynced,setLastSynced]=useState<string|null>(null);
+  const inboxIdsRef=useRef<Set<string>|null>(null);
+  const syncInFlightRef=useRef(false);
+
   const invoke = <T,>(command:string,args?:Record<string,unknown>):Promise<T> => window.__TAURI_INTERNALS__!.invoke(command,args) as Promise<T>;
 
   const settings=useSettings();
@@ -100,6 +108,43 @@ function EmailCenter() {
       .finally(()=>{if(active)setLoadingMessages(false);});
     return ()=>{active=false;};
   },[gmailEmail,folder,activeQuery]);
+  useEffect(()=>{
+    inboxIdsRef.current=null;
+    setUnreadCount(0);
+    setLastSynced(null);
+    if(!gmailEmail||!isDesktopRuntime()||!autoSync)return;
+    let active=true;
+    const sync=async()=>{
+      if(syncInFlightRef.current||document.visibilityState==="hidden"||!navigator.onLine)return;
+      syncInFlightRef.current=true;
+      try{
+        const snapshot=await invoke<GmailInboxState>("gmail_inbox_state");
+        if(!active)return;
+        const newIds=new Set(snapshot.ids);
+        const previous=inboxIdsRef.current;
+        const arrived=previous?snapshot.ids.filter(id=>!previous.has(id)):[];
+        inboxIdsRef.current=newIds;
+        setUnreadCount(snapshot.unread_count);
+        setLastSynced(new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"}));
+        if(arrived.length){
+          if(notifyNew)toast.info(arrived.length===1?"وصلت رسالة جديدة إلى Gmail":`وصلت ${arrived.length} رسائل جديدة إلى Gmail`);
+          if(folder==="INBOX"&&!activeQuery){
+            const page=await invoke<GmailPage>("gmail_search_messages",{folder:"INBOX",query:"",pageToken:null});
+            if(active){setMessages(current=>[...page.items,...current.filter(item=>!page.items.some(m=>m.id===item.id))]);setNextPageToken(page.next_page_token);}
+          }
+        }
+      }catch(e){
+        // Temporary network issues must not interrupt reading or flood notifications.
+        if(active)setLastSynced("تعذر التحديث التلقائي");
+      }finally{syncInFlightRef.current=false;}
+    };
+    void sync();
+    const timer=window.setInterval(()=>void sync(),15000);
+    const onResume=()=>{if(document.visibilityState==="visible")void sync();};
+    window.addEventListener("online",onResume);
+    document.addEventListener("visibilitychange",onResume);
+    return ()=>{active=false;window.clearInterval(timer);window.removeEventListener("online",onResume);document.removeEventListener("visibilitychange",onResume);};
+  },[gmailEmail,folder,activeQuery,autoSync,notifyNew]);
   const readMessage=async(item:GmailItem)=>{
     setSelected(item);setMessageBody("");setDownloadList([]);setReading(true);
     try{
@@ -207,7 +252,7 @@ function EmailCenter() {
     </div>
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="panel space-y-1 p-3">
-        {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span></button>)}
+        {folders.map(({id,label,icon:Icon})=><button key={id} onClick={()=>setFolder(id)} className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-right transition-colors ${folder===id?"bg-primary text-primary-foreground":"hover:bg-muted"}`}><Icon className="h-5 w-5"/><span>{label}</span>{id==="INBOX"&&unreadCount>0&&<span className="mr-auto rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">{unreadCount}</span>}</button>)}
         <Link to="/mail/incoming" className="mt-3 flex items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted"><Archive className="h-4 w-4"/> سجل المراسلات الإدارية</Link>
       </aside>
       <div className="panel min-h-[430px] overflow-hidden">
@@ -217,6 +262,13 @@ function EmailCenter() {
           <button onClick={()=>setActiveQuery(search)} className="rounded-lg border px-3 py-1 text-sm">بحث</button>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={autoSync} onChange={e=>setAutoSync(e.target.checked)}/> مزامنة تلقائية كل 15 ثانية</label>
+            <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={notifyNew} onChange={e=>setNotifyNew(e.target.checked)}/> تنبيه الرسائل الجديدة</label>
+          </div>
+          <span>{lastSynced?"آخر فحص: "+lastSynced:""}</span>
+        </div>
         <div className="flex items-center justify-between border-b px-4 py-2 text-sm">
           <span>{gmailEmail?folders.find(f=>f.id===folder)?.label:"اربط Gmail لعرض الرسائل"}</span>
           <button disabled={!gmailEmail||loadingMessages} className="rounded-lg border px-3 py-1.5 disabled:opacity-50" onClick={()=>void refreshMessages()}>{loadingMessages?"جارٍ التحديث…":"تحديث البريد"}</button>
