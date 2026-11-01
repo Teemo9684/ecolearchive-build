@@ -56,10 +56,10 @@ export function NativeWordComposer({initialKind}:{initialKind?:"bordereau"|"corr
   useEffect(()=>{
     if(!initialKind||!templates.length)return;
     const match=templates.find(t=>{
-      const label=t.name.replace(/\\.docx$/i,"").normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g,"");
+      const label=t.name.replace(/\.docx$/i,"").normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g,"");
       return initialKind==="bordereau"
-        ? /جدول\\s*(ال)?إرسال|bordereau/i.test(label)
-        : /مراسلة|correspondance|courrier|رسالة\\s*إدارية/i.test(label);
+        ? /جدول\s*(ال)?إرسال|bordereau/i.test(label)
+        : /مراسلة|correspondance|courrier|رسالة\s*إدارية/i.test(label);
     });
     if(match)setSelected(match.name);
     else toast.error(initialKind==="bordereau"?"قالب جدول الإرسال غير موجود في قوالب الوثائق":"قالب المراسلة غير موجود في قوالب الوثائق");
