@@ -418,3 +418,27 @@
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
 @keyframes ecole-ticker-motion { from { transform: translateX(0); } to { transform: translateX(10%); } }
 @media (prefers-reduced-motion: reduce) { .ecole-ticker-track { animation: none; } }
+
+/* Premium metallic relief for the original sidebar book and quill. No new drawing or backdrop. */
+.sidebar-book-3d { isolation: isolate; filter: drop-shadow(0 3px 1px rgba(39,17,1,.95)) drop-shadow(0 7px 7px rgba(0,0,0,.45)) drop-shadow(0 0 8px rgba(255,186,65,.26)); }
+.sidebar-book-3d-base { filter: saturate(1.18) contrast(1.14) brightness(.88); }
+.sidebar-book-3d-metal,
+.sidebar-book-3d-shine {
+  pointer-events:none;
+  -webkit-mask-size:contain; mask-size:contain;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:center; mask-position:center;
+}
+.sidebar-book-3d-metal {
+  background: linear-gradient(135deg, rgba(255,248,194,.72) 0%, rgba(255,211,101,.28) 17%, rgba(101,49,5,.36) 35%, rgba(255,234,154,.62) 49%, rgba(123,67,11,.3) 64%, rgba(255,198,72,.54) 82%, rgba(255,247,199,.7) 100%);
+  mix-blend-mode:screen;
+  opacity:.7;
+}
+.sidebar-book-3d-shine {
+  background: linear-gradient(105deg, transparent 32%, rgba(255,255,222,.04) 42%, rgba(255,245,187,.65) 49%, rgba(255,255,231,.09) 54%, transparent 64%);
+  background-size:300% 100%;
+  animation: sidebar-metal-glint 9s ease-in-out infinite;
+  opacity:.85;
+}
+@keyframes sidebar-metal-glint { 0%, 35% { background-position: 100% 50%; } 70%, 100% { background-position: 0% 50%; } }
+@media (prefers-reduced-motion:reduce) { .sidebar-book-3d-shine { animation:none; } }
