@@ -413,10 +413,11 @@
   -webkit-mask-image: linear-gradient(to left, transparent 0%, rgba(0,0,0,.12) 12px, #000 90px, #000 100%);
   mask-image: linear-gradient(to left, transparent 0%, rgba(0,0,0,.12) 12px, #000 90px, #000 100%);
 }
+.ecole-ticker-viewport { container-type: inline-size; }
 .ecole-ticker-track { animation: ecole-ticker-motion 18s linear infinite; }
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
-@keyframes ecole-ticker-motion { from { transform: translate3d(0,0,0); } to { transform: translate3d(50%,0,0); } }
+@keyframes ecole-ticker-motion { from { transform: translate3d(-100%,0,0); } to { transform: translate3d(100cqw,0,0); } }
 @media (prefers-reduced-motion: reduce) { .ecole-ticker-track { animation: none; } }
 
 /* Premium metallic relief for the original sidebar book and quill. No new drawing or backdrop. */
