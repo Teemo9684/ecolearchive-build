@@ -276,7 +276,7 @@ function SettingsPage() {
           {snapshots.length > 0 && <div className="mt-3 space-y-2">
             {snapshots.map(snapshot => <div key={snapshot.fileName} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
               <div>
-                <p className="font-semibold">{snapshot.fileName}</p>
+                <p className="font-semibold">{snapshot.fileName.startsWith("before-restore-") ? "نسخة حماية قبل الاسترجاع — " : "نسخة يومية — "}{snapshot.fileName}</p>
                 <p className="text-xs text-muted-foreground">{snapshot.valid
                   ? `${snapshot.records} سجل · ${snapshot.attachments} مرفق · فحص السلامة ناجح`
                   : `نسخة غير سليمة: ${snapshot.problem || "فشل الفحص"}`}</p>
