@@ -40,7 +40,7 @@ export function ImportDialog({
   const [prepared, setPrepared] = useState<PreparedFile[] | null>(null);
   const [skipDup, setSkipDup] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [m, setM] = useState({ categoryId: defaultCategory ?? "", subcategory: "", academicYear: settings.currentYear, tags: "", description: "", date: new Date().toISOString().slice(0, 10) });
+  const [m, setM] = useState({ categoryId: defaultCategory ?? "", subcategory: "", service: "", academicYear: settings.currentYear, tags: "", description: "", date: new Date().toISOString().slice(0, 10) });
   const [err, setErr] = useState("");
 
   useEffect(() => { if (files.length) { setPrepared(null); prepareFiles(files).then(setPrepared); } }, [files]);
@@ -88,6 +88,7 @@ export function ImportDialog({
             </select>
           </Field>
           <Field label="التصنيف الفرعي"><Input value={m.subcategory} onChange={(e) => setM({ ...m, subcategory: e.target.value })} placeholder="اختياري" /></Field>
+          <Field label="المصلحة / الجهة المعنية"><Input value={m.service} onChange={(e) => setM({ ...m, service: e.target.value })} placeholder="اختياري — مثل مديرية التربية" /></Field>
           <Field label="السنة الدراسية">
             <select className="field-select w-full" value={m.academicYear} onChange={(e) => setM({ ...m, academicYear: e.target.value })}>
               {years.map((y) => <option key={y.id} value={y.label}>{y.label}</option>)}
@@ -172,6 +173,7 @@ export function EditDocDialog({ doc, onClose }: { doc: DocumentRecord | null; on
             </select>
           </Field>
           <Field label="التصنيف الفرعي"><Input value={d.subcategory} onChange={(e) => setD({ ...d, subcategory: e.target.value })} /></Field>
+          <Field label="المصلحة / الجهة المعنية"><Input value={d.service ?? ""} onChange={(e) => setD({ ...d, service: e.target.value })} placeholder="اختياري" /></Field>
           <Field label="السنة الدراسية">
             <select className="field-select w-full" value={d.academicYear} onChange={(e) => setD({ ...d, academicYear: e.target.value })}>
               {years.map((y) => <option key={y.id} value={y.label}>{y.label}</option>)}
