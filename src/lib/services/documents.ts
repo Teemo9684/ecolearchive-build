@@ -59,14 +59,26 @@ export async function updateDocument(doc: DocumentRecord) {
 }
 export const setArchived = (d: DocumentRecord, archived: boolean) =>
   updateDocument({ ...d, status: archived ? "archived" : "active" });
-export const moveToBin = (d: DocumentRecord) => updateDocument({ ...d, deletedAt: nowIso() });
-export const restoreFromBin = (d: DocumentRecord) => updateDocument({ ...d, deletedAt: null });
+// Explicit document actions override any parent-deletion marker. A manually binned
+// attachment must not later be restored by a correspondence metadata update.
+export const moveToBin = (d: DocumentRecord) =>
+  updateDocument({ ...d, deletedAt: nowIso(), deletedByCorrespondence: false });
+export const restoreFromBin = (d: DocumentRecord) =>
+  updateDocument({ ...d, deletedAt: null, deletedByCorrespondence: false });
 
 /** Permanent removal from the app store only (never touches files on the PC). */
 export async function purgeDocument(d: DocumentRecord) {
-  if (d.fileId) await repo("documentFiles").remove(d.fileId);
-  await repo("documents").remove(d.id);
-  await logAudit("purge", "document", d.id, `حذف نهائي ${d.title}`);
+  const records = repo<DocumentRecord>("documents");
+  const current = await records.get(d.id);
+  if (!current) return;
+  if (!current.deletedAt) throw new Error("يجب نقل الوثيقة إلى سلة المحذوفات قبل الحذف النهائي");
+  // Other archive cards may point to this very same stored blob. Do not break them.
+  const sharedFile = current.fileId && (await records.list()).some(
+    other => other.id !== current.id && other.fileId === current.fileId
+  );
+  await records.remove(current.id);
+  if (current.fileId && !sharedFile) await repo("documentFiles").remove(current.fileId);
+  await logAudit("purge", "document", current.id, `حذف نهائي ${current.title}`);
 }
 
 export async function getFile(d: DocumentRecord) {
