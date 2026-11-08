@@ -325,6 +325,133 @@ fn count_automatic_snapshots(folder: &std::path::Path) -> Result<usize, String> 
     Ok(list_automatic_snapshots(folder)?.len())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+struct SnapshotInfo {
+    file_name: String,
+    records: i64,
+    attachments: i64,
+    valid: bool,
+    problem: Option<String>,
+}
+
+/// Read-only inspection: SQL integrity check, JSON records and every stored attachment SHA.
+fn inspect_snapshot(path: &std::path::Path) -> Result<(i64, i64), String> {
+    let snapshot = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let integrity: String = snapshot.query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    if integrity != "ok" { return Err("قاعدة النسخة الاحتياطية غير سليمة".into()); }
+    let records: i64 = snapshot.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let attachments: i64 = snapshot.query_row("SELECT COUNT(*) FROM attachments", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    {
+        let mut stmt = snapshot.prepare("SELECT collection,id,payload FROM records")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        }).map_err(|e| e.to_string())?;
+        for row in rows {
+            let (collection, id, payload) = row.map_err(|e| e.to_string())?;
+            check_collection(&collection)?;
+            let json: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
+            if json.get("id").and_then(|v| v.as_str()) != Some(id.as_str()) {
+                return Err("معرّف سجل غير مطابق داخل النسخة".into());
+            }
+        }
+    }
+    {
+        let mut stmt = snapshot.prepare("SELECT sha256,data,bytes FROM attachments")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?, row.get::<_, i64>(2)?))
+        }).map_err(|e| e.to_string())?;
+        for row in rows {
+            let (hash, data, bytes) = row.map_err(|e| e.to_string())?;
+            if bytes != data.len() as i64 || !hash.eq_ignore_ascii_case(&format!("{:x}", Sha256::digest(&data))) {
+                return Err("مرفق تالف أو غير مطابق داخل النسخة".into());
+            }
+        }
+    }
+    Ok((records, attachments))
+}
+
+fn snapshot_file_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
+    // A filename only: prevents traversal, arbitrary database loading, and deletion.
+    let valid = name.len() == "ecolearchive-2026-11-08.sqlite3".len()
+        && name.starts_with("ecolearchive-") && name.ends_with(".sqlite3")
+        && name["ecolearchive-".len().."ecolearchive-".len()+10].bytes()
+            .enumerate().all(|(i, c)| if i == 4 || i == 7 { c == b'-' } else { c.is_ascii_digit() });
+    if !valid { return Err("اسم النسخة الاحتياطية غير مسموح".into()); }
+    let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
+    let path = root.join(name);
+    if !path.is_file() { return Err("النسخة المختارة غير موجودة".into()); }
+    Ok(path)
+}
+
+#[tauri::command]
+fn list_verified_archive_backups(app: tauri::AppHandle) -> Result<Vec<SnapshotInfo>, String> {
+    let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
+    if !root.exists() { return Ok(vec![]); }
+    let mut names = list_automatic_snapshots(&root)?;
+    names.sort_by(|a,b| b.cmp(a));
+    Ok(names.into_iter().map(|name| {
+        match snapshot_file_path(&app, &name).and_then(|path| inspect_snapshot(&path)) {
+            Ok((records, attachments)) => SnapshotInfo {
+                file_name: name, records, attachments, valid: true, problem: None,
+            },
+            Err(error) => SnapshotInfo {
+                file_name: name, records: 0, attachments: 0, valid: false, problem: Some(error),
+            },
+        }
+    }).collect())
+}
+
+#[tauri::command]
+fn restore_automatic_archive_backup(
+    app: tauri::AppHandle, file_name: String,
+) -> Result<ImportReport, String> {
+    let selected = snapshot_file_path(&app, &file_name)?;
+    let (expected_records, expected_files) = inspect_snapshot(&selected)?;
+    let mut conn = connect(&app)?;
+    let root = selected.parent().ok_or("مجلد النسخ غير معروف")?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?.as_millis();
+    let rescue = root.join(format!("before-restore-{}.sqlite3", stamp));
+    // Preserve the live state before any destructive operation; rescue snapshots
+    // are never included in the rotation of the seven routine daily copies.
+    conn.execute("VACUUM INTO ?1", [rescue.to_string_lossy().as_ref()])
+        .map_err(|e| format!("تعذر إنشاء نسخة حماية قبل الاسترجاع: {e}"))?;
+    if let Err(error) = inspect_snapshot(&rescue) {
+        let _ = fs::remove_file(&rescue);
+        return Err(format!("فشل التحقق من نسخة الحماية: {error}"));
+    }
+    // Restoring is one SQL transaction: any insertion error rolls back completely.
+    conn.execute("ATTACH DATABASE ?1 AS restore_source", [selected.to_string_lossy().as_ref()])
+        .map_err(|e| e.to_string())?;
+    let result = (|| -> Result<ImportReport, String> {
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM records", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM attachments", []).map_err(|e| e.to_string())?;
+        tx.execute("INSERT INTO records(collection,id,payload,updated_at) SELECT collection,id,payload,updated_at FROM restore_source.records", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("INSERT INTO attachments(id,name,mime_type,sha256,data,bytes) SELECT id,name,mime_type,sha256,data,bytes FROM restore_source.attachments", [])
+            .map_err(|e| e.to_string())?;
+        let records: i64 = tx.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let files: i64 = tx.query_row("SELECT COUNT(*) FROM attachments", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if records != expected_records || files != expected_files {
+            return Err("عدد السجلات لا يطابق النسخة المختارة".into());
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(ImportReport { records: records as usize, attachments: files as usize })
+    })();
+    let _ = conn.execute("DETACH DATABASE restore_source", []);
+    result
+}
+
 #[tauri::command]
 async fn check_desktop_update(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_updater::UpdaterExt;
@@ -803,7 +930,7 @@ pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,automatic_archive_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
+      .invoke_handler(tauri::generate_handler![open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,automatic_archive_backup,list_verified_archive_backups,restore_automatic_archive_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
