@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Download, FileUp, Upload } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, FileUp, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,38 +107,83 @@ export function ImportDialog({
   );
 }
 
-export function PreviewDialog({ doc, onClose }: { doc: DocumentRecord | null; onClose: () => void }) {
+export function PreviewDialog({
+  doc, onClose, position, total, onPrevious, onNext,
+}: {
+  doc: DocumentRecord | null;
+  onClose: () => void;
+  position?: number;
+  total?: number;
+  onPrevious?: () => void;
+  onNext?: () => void;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [type, setType] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   useEffect(() => {
-    let u: string | null = null;
-    setUrl(null); setText(null);
-    if (doc) getFile(doc).then(async (f) => {
-      if (!f) { setType("none"); return; }
-      const t = f.type || doc.mimeType || "";
-      setType(t);
-      if (t.startsWith("text/")) setText(await f.blob.text());
-      else { u = URL.createObjectURL(f.blob); setUrl(u); }
-    });
-    return () => { if (u) URL.revokeObjectURL(u); };
-  }, [doc]);
+    let disposed = false;
+    let objectUrl: string | null = null;
+    setUrl(null);
+    setText(null);
+    setType("");
+    setError("");
+    setLoading(!!doc);
+    if (doc) {
+      getFile(doc).then(async (file) => {
+        if (disposed) return;
+        if (!file) { setType("none"); return; }
+        const mime = file.type || doc.mimeType || "";
+        if (mime.startsWith("text/")) {
+          const content = await file.blob.text();
+          if (!disposed) { setType(mime); setText(content); }
+        } else {
+          const created = URL.createObjectURL(file.blob);
+          if (disposed) URL.revokeObjectURL(created);
+          else { objectUrl = created; setType(mime); setUrl(created); }
+        }
+      }).catch((err) => {
+        if (!disposed) setError(err instanceof Error ? err.message : String(err));
+      }).finally(() => { if (!disposed) setLoading(false); });
+    }
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc?.id, doc?.fileId, doc?.updatedAt]);
   const canInline = type.startsWith("image/") || type === "application/pdf";
   return (
     <Dialog open={!!doc} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent dir="rtl" className="max-w-4xl">
-        <DialogHeader className="text-start"><DialogTitle className="pe-6">{doc?.title}</DialogTitle></DialogHeader>
-        <div className="min-h-64 rounded-md border bg-muted/40">
-          {type === "none" && <div className="p-8 text-center text-sm text-muted-foreground">لا يوجد ملف مرفق بهذه الوثيقة</div>}
-          {text !== null && <pre className="whitespace-pre-wrap p-4 text-sm">{text}</pre>}
-          {url && type.startsWith("image/") && <img src={url} alt={doc?.title} className="mx-auto max-h-[65vh]" />}
-          {url && type === "application/pdf" && <iframe src={url} title="معاينة" className="h-[65vh] w-full" />}
-          {url && !canInline && (
-            <div className="p-8 text-center text-sm text-muted-foreground">المعاينة غير مدعومة لهذا النوع من الملفات في المتصفح (وورد/إكسل). يمكنك تنزيل الملف وفتحه ببرنامجه.</div>
+      <DialogContent dir="rtl" className="max-w-5xl">
+        <DialogHeader className="text-start">
+          <DialogTitle className="pe-6">{doc?.title}</DialogTitle>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {doc?.reference && <span>المرجع: {doc.reference}</span>}
+            {doc?.academicYear && <span>السنة: {doc.academicYear}</span>}
+            {total !== undefined && total > 0 && position !== undefined && <span>الوثيقة {position} من {total}</span>}
+          </div>
+        </DialogHeader>
+        <div className="min-h-64 max-h-[68vh] overflow-auto rounded-md border bg-muted/40">
+          {loading && <div className="p-8 text-center text-sm text-muted-foreground">جار تحميل المعاينة…</div>}
+          {!loading && error && <div className="p-8 text-center text-sm text-destructive">تعذر فتح المعاينة: {error}</div>}
+          {!loading && !error && type === "none" && <div className="p-8 text-center text-sm text-muted-foreground">لا يوجد ملف مرفق بهذه الوثيقة</div>}
+          {!loading && !error && text !== null && <pre className="whitespace-pre-wrap p-4 text-sm">{text}</pre>}
+          {!loading && !error && url && type.startsWith("image/") && <img src={url} alt={doc?.title ?? "معاينة الوثيقة"} className="mx-auto max-h-[65vh] object-contain" />}
+          {!loading && !error && url && type === "application/pdf" && <iframe src={url} title="معاينة الوثيقة" className="h-[65vh] w-full" />}
+          {!loading && !error && url && !canInline && (
+            <div className="p-8 text-center text-sm text-muted-foreground">المعاينة المباشرة غير مدعومة لهذا النوع من الملفات (Word / Excel). يمكنك تنزيل الملف وفتحه ببرنامجه.</div>
           )}
         </div>
-        <DialogFooter className="sm:justify-start">
-          {doc?.fileId && <Button variant="outline" onClick={() => doc && downloadDocument(doc).catch((e) => toast.error(e.message))}><Download className="h-4 w-4" />تنزيل النسخة</Button>}
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            {onPrevious && <Button type="button" variant="outline" size="sm" onClick={onPrevious}><ChevronRight className="h-4 w-4" />السابق</Button>}
+            {onNext && <Button type="button" variant="outline" size="sm" onClick={onNext}>التالي<ChevronLeft className="h-4 w-4" /></Button>}
+          </div>
+          <div className="flex items-center gap-2">
+            {doc?.fileId && <Button variant="outline" onClick={() => doc && downloadDocument(doc).catch((e) => toast.error(e.message))}><Download className="h-4 w-4" />تنزيل النسخة</Button>}
+            <Button type="button" variant="outline" onClick={onClose}>إغلاق</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
