@@ -41,7 +41,7 @@ jobs:
           python scripts/generate-gold-mask.py
           if ($LASTEXITCODE -ne 0) { throw 'Logo mask generation failed' }
       - name: Install JavaScript dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
       - name: Run complete frontend regression suite
         run: bun run test
       - name: Bundle Windows frontend without releasing an installer
