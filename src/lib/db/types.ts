@@ -12,6 +12,8 @@ export interface DocumentRecord {
   reference: string;
   categoryId: ID;
   subcategory: string;
+  /** Optional responsible department or correspondent for organizing archive records. */
+  service?: string;
   academicYear: string;
   docType: string; // pdf | word | excel | image | other
   tags: string[];
