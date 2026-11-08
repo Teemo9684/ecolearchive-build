@@ -26,6 +26,8 @@ export interface DocumentRecord {
   hash: string | null;
   status: "active" | "archived";
   deletedAt: string | null;
+  /** True only when this linked document was moved to the bin by deleting its correspondence. */
+  deletedByCorrespondence?: boolean;
   createdAt: string;
   updatedAt: string;
 }
