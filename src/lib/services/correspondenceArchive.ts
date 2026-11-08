@@ -33,13 +33,29 @@ export async function syncCorrespondenceArchive(c: Correspondence, settings: Set
     deletedAt:c.deletedAt,createdAt:prior?.createdAt??now,updatedAt:now
   };
   await documents.put(document);
-  // Keep linked Word and attachment cards in the same deletion/restore state.
+  // A user may bin an individual attachment without deleting the correspondence.
+  // Only restore documents explicitly marked as deleted by the correspondence.
+  // Legacy deleted documents with no marker stay in the bin: avoid unsafe resurrection.
   const related = (await documents.list()).filter(d =>
     d.id !== id && d.relatedType === "correspondence" && d.relatedId === c.id
   );
   for (const d of related) {
-    if (d.deletedAt !== c.deletedAt || d.reference !== c.reference) {
-      await documents.put({...d,deletedAt:c.deletedAt,reference:c.reference,updatedAt:now});
+    let deletedAt = d.deletedAt;
+    let deletedByCorrespondence = d.deletedByCorrespondence === true;
+    if (c.deletedAt) {
+      if (!d.deletedAt) {
+        deletedAt = c.deletedAt;
+        deletedByCorrespondence = true;
+      }
+    } else if (deletedByCorrespondence) {
+      deletedAt = null;
+      deletedByCorrespondence = false;
+    }
+    if (deletedAt !== d.deletedAt ||
+        deletedByCorrespondence !== (d.deletedByCorrespondence === true) ||
+        d.reference !== c.reference) {
+      await documents.put({...d, deletedAt, deletedByCorrespondence,
+        reference:c.reference, updatedAt:now});
     }
   }
   if(!(await documents.get(id)))throw new Error("تعذر التحقق من حفظ المراسلة في الأرشيف");
