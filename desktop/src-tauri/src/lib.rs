@@ -983,7 +983,7 @@ mod sqlite_tests {
             let bytes = b"attachment";
             let hash = format!("{:x}", Sha256::digest(bytes));
             conn.execute("INSERT INTO attachments(id,name,mime_type,sha256,data,bytes) VALUES(?1,?2,?3,?4,?5,?6)",
-                params!["f","test.pdf","application/pdf",hash,bytes,bytes.len() as i64]).unwrap();
+                params!["f","test.pdf","application/pdf",hash,bytes.as_slice(),bytes.len() as i64]).unwrap();
         }
         assert_eq!(inspect_snapshot(&path).unwrap(), (1,1));
         {
