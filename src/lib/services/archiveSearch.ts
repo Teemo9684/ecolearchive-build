@@ -25,7 +25,7 @@ export function archiveDocumentMatches(
     ? correspondences.get(document.relatedId) : undefined;
   const fields = [
     document.title, document.reference, document.fileName,
-    document.description, document.subcategory, document.academicYear,
+    document.description, document.subcategory, document.service, document.academicYear,
     document.date, ...document.tags,
     linked?.reference, linked?.party, linked?.subject, linked?.date,
     linked?.academicYear, linked?.category, linked?.notes,
