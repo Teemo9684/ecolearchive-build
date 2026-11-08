@@ -969,6 +969,48 @@ mod sqlite_tests {
     }
 
     #[test]
+    fn snapshot_integrity_accepts_good_data_and_rejects_corrupt_attachments() {
+        let path = std::env::temp_dir().join(format!(
+            "ecolearchive-test-backup-{}-{}.sqlite3",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            let json = serde_json::json!({"id":"1","title":"وثيقة اختبار"}).to_string();
+            conn.execute("INSERT INTO records(collection,id,payload) VALUES('documents','1',?1)",[json]).unwrap();
+            let bytes = b"attachment";
+            let hash = format!("{:x}", Sha256::digest(bytes));
+            conn.execute("INSERT INTO attachments(id,name,mime_type,sha256,data,bytes) VALUES(?1,?2,?3,?4,?5,?6)",
+                params!["f","test.pdf","application/pdf",hash,bytes,bytes.len() as i64]).unwrap();
+        }
+        assert_eq!(inspect_snapshot(&path).unwrap(), (1,1));
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute("UPDATE attachments SET sha256='incorrect' WHERE id='f'",[]).unwrap();
+        }
+        assert!(inspect_snapshot(&path).is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn snapshot_rejects_records_with_mismatched_identifiers() {
+        let path = std::env::temp_dir().join(format!(
+            "ecolearchive-test-id-{}-{}.sqlite3",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute("INSERT INTO records(collection,id,payload) VALUES('documents','actual','{\"id\":\"different\"}')",[]).unwrap();
+        }
+        assert!(inspect_snapshot(&path).is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn word_tables_preserve_rtl_and_navy_header() {
         let rows = vec![
             vec!["نوع الوثائق".to_string(), "العدد".to_string(), "ملاحظات".to_string()],
