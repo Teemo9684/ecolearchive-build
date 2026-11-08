@@ -33,7 +33,8 @@ describe("archive organization", () => {
       doc("b", { service: "مصلحة المستخدمين", docType: "word" }),
       doc("c", { academicYear: "2025-2026", docType: "word" }),
     ];
-    const labels = (t: string) => ({ pdf: "PDF", word: "Word" })[t] ?? t;
+    const typeLabels: Record<string, string> = { pdf: "PDF", word: "Word" };
+    const labels = (t: string) => typeLabels[t] ?? t;
     expect(groupArchiveDocuments(records, "year", correspondence, labels).map(x => [x.label, x.docs.length]))
       .toEqual([["2026-2027", 2], ["2025-2026", 1]]);
     expect(groupArchiveDocuments(records, "type", correspondence, labels).map(x => x.label))
