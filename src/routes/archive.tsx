@@ -11,6 +11,7 @@ import { DropZone, ImportDialog } from "@/components/app/documents";
 import { DocumentTable } from "@/components/app/DocumentTable";
 import { normalizeGeneratedReferences } from "@/lib/services/generatedArchive";
 import { archiveDocumentMatches } from "@/lib/services/archiveSearch";
+import { getArchiveService, groupArchiveDocuments, type ArchiveGroupBy } from "@/lib/services/archiveOrganization";
 import { useCollection } from "@/lib/db/hooks";
 import type { AcademicYear, ArchiveCategory, Correspondence, DocumentRecord } from "@/lib/db/types";
 import { DOC_TYPE_LABEL, exportCsv, fmtDate } from "@/lib/files";
@@ -52,6 +53,8 @@ function ArchivePage() {
   const [cat, setCat] = useState("");
   const [year, setYear] = useState("");
   const [type, setType] = useState("");
+  const [service, setService] = useState("");
+  const [groupBy, setGroupBy] = useState<ArchiveGroupBy>("none");
   const [sort, setSort] = useState<"date-desc" | "date-asc" | "title">("date-desc");
 
   const dupGroups = useMemo(() => {
@@ -61,6 +64,7 @@ function ArchivePage() {
   }, [docs]);
 
   const correspondenceById = useMemo(() => new Map(correspondence.map(c => [c.id, c])), [correspondence]);
+  const serviceOptions = useMemo(() => [...new Set(docs.map(d => getArchiveService(d, correspondenceById)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ar")), [docs, correspondenceById]);
   const filtered = useMemo(() => {
     let list = docs.filter((d) =>
       tab === "bin" ? !!d.deletedAt : !d.deletedAt && (tab === "archived" ? d.status === "archived" : d.status === "active"),
@@ -70,9 +74,12 @@ function ArchivePage() {
     if (cat) list = list.filter((d) => d.categoryId === cat);
     if (year) list = list.filter((d) => d.academicYear === year);
     if (type) list = list.filter((d) => d.docType === type);
+    if (service) list = list.filter((d) => getArchiveService(d, correspondenceById) === service);
     if (q.trim()) list = list.filter((d) => archiveDocumentMatches(d, q, correspondenceById));
     return [...list].sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ar") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-  }, [docs, tab, cat, year, type, q, sort, dupGroups, relatedType, relatedId, correspondenceById]);
+  }, [docs, tab, cat, year, type, service, q, sort, dupGroups, relatedType, relatedId, correspondenceById]);
+
+  const grouped = useMemo(() => groupArchiveDocuments(filtered, groupBy, correspondenceById, t => DOC_TYPE_LABEL[t] ?? t || "غير محدد"), [filtered, groupBy, correspondenceById]);
 
   const counts = {
     active: docs.filter((d) => !d.deletedAt && d.status === "active").length,
@@ -87,7 +94,7 @@ function ArchivePage() {
   return (
     <div>
       <PageHeader title="الأرشيف الرقمي"
-        actions={<><Button variant="outline" disabled={checking} onClick={checkIntegrity}><ShieldCheck className="h-4 w-4" />{checking?"جار الفحص…":"فحص سلامة الأرشيف"}</Button><Button variant="outline" onClick={() => exportCsv([["العنوان", "المرجع", "التصنيف", "السنة", "النوع", "التاريخ", "اسم الملف"], ...filtered.map((d) => [d.title, d.reference, catName(d.categoryId), d.academicYear, DOC_TYPE_LABEL[d.docType] ?? "", fmtDate(d.date), d.fileName ?? ""])], "فهرس-الأرشيف.csv")}>
+        actions={<><Button variant="outline" disabled={checking} onClick={checkIntegrity}><ShieldCheck className="h-4 w-4" />{checking?"جار الفحص…":"فحص سلامة الأرشيف"}</Button><Button variant="outline" onClick={() => exportCsv([["العنوان", "المرجع", "التصنيف", "السنة", "النوع", "المصلحة / الجهة", "التاريخ", "اسم الملف"], ...filtered.map((d) => [d.title, d.reference, catName(d.categoryId), d.academicYear, DOC_TYPE_LABEL[d.docType] ?? "", getArchiveService(d, correspondenceById), fmtDate(d.date), d.fileName ?? ""])], "فهرس-الأرشيف.csv")}>
           <Download className="h-4 w-4" />تصدير الفهرس</Button></>} />
       {integrity&&<section className="panel mt-3 p-4 text-sm" role="status"><h2 className="font-bold mb-2">نتائج فحص الأرشيف — {integrity.documents} وثيقة</h2>{([["ملفات مفقودة",integrity.missingFiles],["اختلاف بصمة الملفات",integrity.hashMismatches],["مراسلات غير مرتبطة",integrity.unlinkedCorrespondences],["مراجع مكررة",integrity.duplicateReferences]] as const).map(([label,items])=><div key={label} className="mb-1"><strong>{label}: {items.length}</strong>{items.length>0&&<ul className="list-disc ps-5">{items.slice(0,30).map((item,i)=><li key={i}>{item}</li>)}</ul>}</div>)}</section>}
       {relatedType && relatedId && <div className="mt-3 rounded-lg border border-gold/40 bg-muted p-3 text-sm">عرض الوثائق المرتبطة بالسجل المختار. <a href="/archive" className="ms-2 font-semibold text-primary underline">عرض جميع الوثائق</a></div>}
@@ -113,6 +120,15 @@ function ArchivePage() {
           <select className="field-select" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">كل الأنواع</option>{Object.entries(DOC_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <select className="field-select" aria-label="المصلحة أو الجهة المعنية" value={service} onChange={e => setService(e.target.value)}>
+            <option value="">كل المصالح والجهات</option>{serviceOptions.map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <select className="field-select" aria-label="تجميع الوثائق" value={groupBy} onChange={e => setGroupBy(e.target.value as ArchiveGroupBy)}>
+            <option value="none">عرض جميع الوثائق</option>
+            <option value="year">تجميع حسب السنة الدراسية</option>
+            <option value="type">تجميع حسب نوع الملف</option>
+            <option value="service">تجميع حسب المصلحة / الجهة</option>
+          </select>
           <select className="field-select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
             <option value="date-desc">الأحدث أولا</option><option value="date-asc">الأقدم أولا</option><option value="title">حسب العنوان</option>
           </select>
@@ -125,7 +141,13 @@ function ArchivePage() {
         )}
         {tab === "bin" && <div className="mx-3 mb-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">الوثائق في السلة قابلة للاستعادة. الحذف النهائي يزيل النسخة المخزنة في التطبيق فقط.</div>}
         {error ? <div className="p-3"><ErrorBox error={error} /></div> : loading ? <Loading /> : (
-          <DocumentTable docs={filtered} cats={cats} mode={tab === "bin" ? "bin" : "active"} />
+          <div className="space-y-3">
+            {grouped.length === 0 && <DocumentTable docs={[]} cats={cats} mode={tab === "bin" ? "bin" : "active"} />}
+            {grouped.map(group => <section key={group.label || "all"} aria-label={group.label || "الوثائق"}>
+              {groupBy !== "none" && <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-sm font-semibold"><span>{group.label}</span><span className="text-xs text-muted-foreground">{group.docs.length} وثيقة</span></div>}
+              <DocumentTable docs={group.docs} cats={cats} mode={tab === "bin" ? "bin" : "active"} />
+            </section>)}
+          </div>
         )}
       </div>
     </div>
