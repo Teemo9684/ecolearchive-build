@@ -79,7 +79,7 @@ function ArchivePage() {
     return [...list].sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ar") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   }, [docs, tab, cat, year, type, service, q, sort, dupGroups, relatedType, relatedId, correspondenceById]);
 
-  const grouped = useMemo(() => groupArchiveDocuments(filtered, groupBy, correspondenceById, t => DOC_TYPE_LABEL[t] ?? t || "غير محدد"), [filtered, groupBy, correspondenceById]);
+  const grouped = useMemo(() => groupArchiveDocuments(filtered, groupBy, correspondenceById, t => DOC_TYPE_LABEL[t] ?? (t || "غير محدد")), [filtered, groupBy, correspondenceById]);
 
   const counts = {
     active: docs.filter((d) => !d.deletedAt && d.status === "active").length,
