@@ -10,8 +10,9 @@ import { ErrorBox, Loading, PageHeader, Pill } from "@/components/app/bits";
 import { DropZone, ImportDialog } from "@/components/app/documents";
 import { DocumentTable } from "@/components/app/DocumentTable";
 import { normalizeGeneratedReferences } from "@/lib/services/generatedArchive";
+import { archiveDocumentMatches } from "@/lib/services/archiveSearch";
 import { useCollection } from "@/lib/db/hooks";
-import type { AcademicYear, ArchiveCategory, DocumentRecord } from "@/lib/db/types";
+import type { AcademicYear, ArchiveCategory, Correspondence, DocumentRecord } from "@/lib/db/types";
 import { DOC_TYPE_LABEL, exportCsv, fmtDate } from "@/lib/files";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ type Tab = "active" | "archived" | "bin" | "dups";
 
 function ArchivePage() {
   const { data: docs, loading, error } = useCollection<DocumentRecord>("documents");
+  const { data: correspondence } = useCollection<Correspondence>("correspondences");
   const { data: cats } = useCollection<ArchiveCategory>("archiveCategories");
   const { data: years } = useCollection<AcademicYear>("academicYears");
   const [files, setFiles] = useState<File[]>([]);
@@ -58,8 +60,8 @@ function ArchivePage() {
     return [...m.values()].filter((g) => g.length > 1);
   }, [docs]);
 
+  const correspondenceById = useMemo(() => new Map(correspondence.map(c => [c.id, c])), [correspondence]);
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
     let list = docs.filter((d) =>
       tab === "bin" ? !!d.deletedAt : !d.deletedAt && (tab === "archived" ? d.status === "archived" : d.status === "active"),
     );
@@ -68,9 +70,9 @@ function ArchivePage() {
     if (cat) list = list.filter((d) => d.categoryId === cat);
     if (year) list = list.filter((d) => d.academicYear === year);
     if (type) list = list.filter((d) => d.docType === type);
-    if (s) list = list.filter((d) => [d.title, d.reference, d.fileName, d.description, d.subcategory, ...d.tags].some((x) => x?.toLowerCase().includes(s)));
+    if (q.trim()) list = list.filter((d) => archiveDocumentMatches(d, q, correspondenceById));
     return [...list].sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ar") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-  }, [docs, tab, cat, year, type, q, sort, dupGroups, relatedType, relatedId]);
+  }, [docs, tab, cat, year, type, q, sort, dupGroups, relatedType, relatedId, correspondenceById]);
 
   const counts = {
     active: docs.filter((d) => !d.deletedAt && d.status === "active").length,
@@ -101,7 +103,7 @@ function ArchivePage() {
           ))}
         </div>
         <div className="flex flex-wrap gap-2 p-3">
-          <Input className="max-w-xs" placeholder="بحث في العنوان والمرجع والكلمات المفتاحية..." value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="max-w-xs" placeholder="ابحث برقم المراسلة، المرسل/المرسل إليه، الموضوع أو السنة..." value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="field-select" value={cat} onChange={(e) => setCat(e.target.value)}>
             <option value="">كل التصنيفات</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
