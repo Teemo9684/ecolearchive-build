@@ -381,10 +381,15 @@ fn inspect_snapshot(path: &std::path::Path) -> Result<(i64, i64), String> {
 fn snapshot_file_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
     // A filename only: prevents traversal, arbitrary database loading, and deletion.
     let bytes = name.as_bytes();
-    let valid = bytes.len() == b"ecolearchive-2026-11-08.sqlite3".len()
+    let daily = bytes.len() == b"ecolearchive-2026-11-08.sqlite3".len()
         && bytes.starts_with(b"ecolearchive-") && bytes.ends_with(b".sqlite3")
         && bytes.get(13..23).is_some_and(|date| date.iter().enumerate()
             .all(|(i, c)| if i == 4 || i == 7 { *c == b'-' } else { c.is_ascii_digit() }));
+    let rescue = bytes.starts_with(b"before-restore-") && bytes.ends_with(b".sqlite3")
+        && bytes.len() > b"before-restore-.sqlite3".len()
+        && bytes[b"before-restore-".len()..bytes.len()-b".sqlite3".len()]
+            .iter().all(|digit| digit.is_ascii_digit());
+    let valid = daily || rescue;
     if !valid { return Err("اسم النسخة الاحتياطية غير مسموح".into()); }
     let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
     let path = root.join(name);
@@ -397,6 +402,15 @@ fn list_verified_archive_backups(app: tauri::AppHandle) -> Result<Vec<SnapshotIn
     let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
     if !root.exists() { return Ok(vec![]); }
     let mut names = list_automatic_snapshots(&root)?;
+    // Rescue snapshots are deliberately excluded from seven-day rotation, but
+    // included in the recovery chooser to allow reversing a mistaken restore.
+    for entry in fs::read_dir(&root).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("before-restore-") && name.ends_with(".sqlite3") && entry.path().is_file() {
+            names.push(name);
+        }
+    }
     names.sort_by(|a,b| b.cmp(a));
     Ok(names.into_iter().map(|name| {
         match snapshot_file_path(&app, &name).and_then(|path| inspect_snapshot(&path)) {
