@@ -53,12 +53,41 @@ function SettingsPage() {
   const [autoBackupBusy, setAutoBackupBusy] = useState(false);
   const [autoBackupReport, setAutoBackupReport] = useState<{created:boolean;fileName:string;count:number;location:string}|null>(null);
   const [autoBackupError, setAutoBackupError] = useState("");
+  const [snapshots, setSnapshots] = useState<Array<{fileName:string;records:number;attachments:number;valid:boolean;problem:string|null}>>([]);
+  const [restoreSnapshotName, setRestoreSnapshotName] = useState<string|null>(null);
+  const [restoringSnapshot, setRestoringSnapshot] = useState(false);
+  const loadSnapshots = async () => {
+    setAutoBackupBusy(true);
+    setAutoBackupError("");
+    try {
+      const rows = await invokeDesktop<Array<{fileName:string;records:number;attachments:number;valid:boolean;problem:string|null}>>("list_verified_archive_backups");
+      setSnapshots(rows);
+    } catch (error) {
+      setAutoBackupError(String(error));
+      toast.error("تعذر فحص قائمة النسخ: "+String(error));
+    } finally { setAutoBackupBusy(false); }
+  };
+  const restoreSnapshot = async () => {
+    if (!restoreSnapshotName || restoringSnapshot) return;
+    setRestoringSnapshot(true);
+    try {
+      await (window as unknown as {__TAURI_INTERNALS__:{invoke:(command:string,args:Record<string,string>)=>Promise<unknown>}}).__TAURI_INTERNALS__.invoke("restore_automatic_archive_backup",{fileName:restoreSnapshotName});
+      toast.success("تم استرجاع النسخة بنجاح، سيعاد تحميل البرنامج");
+      setRestoreSnapshotName(null);
+      window.location.reload();
+    } catch (error) {
+      toast.error("فشل الاسترجاع والبيانات الحالية محفوظة: "+String(error));
+    } finally { setRestoringSnapshot(false); }
+  };
+
   const runAutoBackup = async () => {
     setAutoBackupBusy(true);
     setAutoBackupError("");
     try {
       const result = await invokeDesktop<{created:boolean;fileName:string;count:number;location:string}>("automatic_archive_backup");
       setAutoBackupReport(result);
+      const rows = await invokeDesktop<Array<{fileName:string;records:number;attachments:number;valid:boolean;problem:string|null}>>("list_verified_archive_backups");
+      setSnapshots(rows);
       toast.success(result.created ? "تم إنشاء نسخة تلقائية وفحص سلامتها" : "النسخة التلقائية لليوم موجودة");
     } catch (error) {
       setAutoBackupError(String(error));
@@ -242,6 +271,24 @@ function SettingsPage() {
           <p className="break-all">مجلد الحفظ: {autoBackupReport.location}</p>
           <p>الملف: {autoBackupReport.fileName}</p>
         </div>}
+        <div className="mt-3">
+          <Button variant="outline" disabled={autoBackupBusy || restoringSnapshot} onClick={() => void loadSnapshots()}>عرض النسخ اليومية وفحص سلامتها</Button>
+          {snapshots.length > 0 && <div className="mt-3 space-y-2">
+            {snapshots.map(snapshot => <div key={snapshot.fileName} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+              <div>
+                <p className="font-semibold">{snapshot.fileName}</p>
+                <p className="text-xs text-muted-foreground">{snapshot.valid
+                  ? `${snapshot.records} سجل · ${snapshot.attachments} مرفق · فحص السلامة ناجح`
+                  : `نسخة غير سليمة: ${snapshot.problem || "فشل الفحص"}`}</p>
+              </div>
+              <Button size="sm" variant="outline" disabled={!snapshot.valid || autoBackupBusy || restoringSnapshot} onClick={() => setRestoreSnapshotName(snapshot.fileName)}>استرجاع</Button>
+            </div>)}
+          </div>}
+        </div>
+        <Confirm open={!!restoreSnapshotName} onOpenChange={v => !v && setRestoreSnapshotName(null)}
+          title="تأكيد استرجاع النسخة التلقائية" destructive confirmLabel={restoringSnapshot ? "جار الاسترجاع…" : "استبدال بيانات البرنامج"}
+          description={`سيتم استبدال سجلات البرنامج والمرفقات المخزنة بمحتوى النسخة ${restoreSnapshotName || ""}. يحفظ البرنامج تلقائيًا نسخة حماية مستقلة من بياناتك الحالية قبل الاسترجاع، ولا يحذف النسخ اليومية.`}
+          onConfirm={() => void restoreSnapshot()} />
         {autoBackupError && <p className="mt-2 text-sm text-destructive" role="alert">{autoBackupError}</p>}
         <p className="mt-2 text-xs text-muted-foreground">النسخ المحلية على نفس القرص لا تحمي من تلف القرص. استمر في حفظ نسخة خارجية من زر النسخ الاحتياطي الكامل.</p>
       </section>}
