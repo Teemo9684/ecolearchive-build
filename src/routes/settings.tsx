@@ -50,6 +50,21 @@ function SettingsPage() {
   const [newCat, setNewCat] = useState("");
   const [check, setCheck] = useState<BackupCheck | null>(null);
   const [busy, setBusy] = useState(false);
+  const [autoBackupBusy, setAutoBackupBusy] = useState(false);
+  const [autoBackupReport, setAutoBackupReport] = useState<{created:boolean;fileName:string;count:number;location:string}|null>(null);
+  const [autoBackupError, setAutoBackupError] = useState("");
+  const runAutoBackup = async () => {
+    setAutoBackupBusy(true);
+    setAutoBackupError("");
+    try {
+      const result = await invokeDesktop<{created:boolean;fileName:string;count:number;location:string}>("automatic_archive_backup");
+      setAutoBackupReport(result);
+      toast.success(result.created ? "تم إنشاء نسخة تلقائية وفحص سلامتها" : "النسخة التلقائية لليوم موجودة");
+    } catch (error) {
+      setAutoBackupError(String(error));
+      toast.error("تعذر فحص النسخ التلقائي: " + String(error));
+    } finally { setAutoBackupBusy(false); }
+  };
   const [integrity, setIntegrity] = useState<IntegrityReport | null>(null);
   const [scanning, setScanning] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -215,6 +230,21 @@ function SettingsPage() {
           <p className="text-xs text-muted-foreground">فحص للقراءة فقط، لم يتم تعديل أي سجل.</p>
         </div>}
       </section>
+
+      {isDesktop && <section className="panel p-4">
+        <h2 className="mb-2 font-bold">الحماية والنسخ الاحتياطي التلقائي</h2>
+        <p className="mb-3 text-sm text-muted-foreground">يُنشئ البرنامج نسخة SQLite متكاملة تشمل السجلات والمرفقات عند تشغيله، ثم يتحقق منها دوريًا أثناء بقائه مفتوحًا. يحتفظ بآخر 7 نسخ يومية ناجحة، ولا يستبدل بياناتك الحالية.</p>
+        <Button variant="outline" disabled={autoBackupBusy} onClick={() => void runAutoBackup()}>
+          <ShieldCheck className="h-4 w-4" />{autoBackupBusy ? "جار فحص النسخة…" : "التحقق من نسخة اليوم"}
+        </Button>
+        {autoBackupReport && <div className="mt-3 space-y-1 text-xs text-muted-foreground" role="status">
+          <p>{autoBackupReport.created ? "تم إنشاء نسخة سليمة." : "النسخة اليومية موجودة."} · النسخ المتوفرة: {autoBackupReport.count}</p>
+          <p className="break-all">مجلد الحفظ: {autoBackupReport.location}</p>
+          <p>الملف: {autoBackupReport.fileName}</p>
+        </div>}
+        {autoBackupError && <p className="mt-2 text-sm text-destructive" role="alert">{autoBackupError}</p>}
+        <p className="mt-2 text-xs text-muted-foreground">النسخ المحلية على نفس القرص لا تحمي من تلف القرص. استمر في حفظ نسخة خارجية من زر النسخ الاحتياطي الكامل.</p>
+      </section>}
 
       <section className="panel p-4">
         <h2 className="mb-1 font-bold">النسخ الاحتياطي الكامل والاستعادة</h2>
