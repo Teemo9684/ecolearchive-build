@@ -15,6 +15,7 @@ import bookLogo from "@/assets/logo-book.png";
 import packageInfo from "../../../package.json";
 import { EmailCenter } from "@/routes/email";
 import { isDesktopRuntime } from "@/lib/db/desktop";
+import { ensureSeed } from "@/lib/db/seed";
 
 type NavItem = { to: string; label: string; icon: typeof Home; badge?: boolean; hash?: string };
 const NAV: NavItem[][] = [
@@ -75,6 +76,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onResume);
       window.removeEventListener("online", onResume);
     };
+  }, []);
+  // Automatic snapshots are native SQLite files (including attachments).
+  // No web download dialog is opened. Native code skips days already protected.
+  useEffect(() => {
+    if (!isDesktopRuntime()) return;
+    let stopped = false;
+    let running = false;
+    const backup = async () => {
+      if (stopped || running) return;
+      running = true;
+      try {
+        await ensureSeed();
+        if (!stopped) await window.__TAURI_INTERNALS__!.invoke("automatic_archive_backup");
+      } catch (error) {
+        console.warn("Automatic archive backup failed:", error);
+      } finally {
+        running = false;
+      }
+    };
+    void backup();
+    const timer = window.setInterval(() => void backup(), 6 * 60 * 60 * 1000);
+    return () => { stopped = true; window.clearInterval(timer); };
   }, []);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => setOpen(false), [path]);
