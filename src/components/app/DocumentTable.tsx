@@ -14,6 +14,7 @@ export function DocumentTable({ docs, cats, mode = "active" }: { docs: DocumentR
   const [del, setDel] = useState<DocumentRecord | null>(null);
   const [purge, setPurge] = useState<DocumentRecord | null>(null);
   const catName = (id: string) => cats.find((c) => c.id === id)?.name ?? "—";
+  const previewIndex = preview ? docs.findIndex(d => d.id === preview.id) : -1;
   if (!docs.length) return <Empty text="لا توجد وثائق مطابقة" />;
   return (
     <>
@@ -64,7 +65,7 @@ export function DocumentTable({ docs, cats, mode = "active" }: { docs: DocumentR
           </tbody>
         </table>
       </div>
-      <PreviewDialog doc={preview} onClose={() => setPreview(null)} />
+      <PreviewDialog doc={preview} onClose={() => setPreview(null)} position={previewIndex >= 0 ? previewIndex + 1 : undefined} total={docs.length} onPrevious={previewIndex > 0 ? () => setPreview(docs[previewIndex - 1]) : undefined} onNext={previewIndex >= 0 && previewIndex < docs.length - 1 ? () => setPreview(docs[previewIndex + 1]) : undefined} />
       <EditDocDialog doc={edit} onClose={() => setEdit(null)} />
       <Confirm open={!!del} onOpenChange={(v) => !v && setDel(null)} title="نقل إلى سلة المحذوفات؟"
         description={`سيتم نقل "${del?.title}" إلى سلة المحذوفات ويمكن استعادتها لاحقا.`} confirmLabel="نقل إلى السلة" destructive
