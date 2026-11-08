@@ -6,6 +6,7 @@ import { logAudit } from "./audit";
 export interface ImportMeta {
   categoryId: string;
   subcategory: string;
+  service?: string;
   academicYear: string;
   tags: string[];
   description: string;
@@ -40,7 +41,7 @@ export async function importPrepared(items: PreparedFile[], meta: ImportMeta): P
     await repo<DocumentFile>("documentFiles").put(f);
     const title = it.file.name.replace(/\.[^.]+$/, "");
     const doc: DocumentRecord = {
-      id: uid(), title, reference: "", categoryId: meta.categoryId, subcategory: meta.subcategory,
+      id: uid(), title, reference: "", categoryId: meta.categoryId, subcategory: meta.subcategory, service: meta.service?.trim() ?? "",
       academicYear: meta.academicYear, docType: detectDocType(it.file.name, it.file.type), tags: meta.tags,
       description: meta.description, date: meta.date, relatedType: meta.relatedType, relatedId: meta.relatedId,
       fileId: fid, fileName: it.file.name, mimeType: it.file.type || null, size: it.file.size, hash: it.hash,
