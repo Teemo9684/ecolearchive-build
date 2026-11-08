@@ -243,6 +243,7 @@ fn automatic_archive_backup(app: tauri::AppHandle) -> Result<AutomaticBackupRepo
     let file_name = format!("ecolearchive-{}.sqlite3", today);
     let destination = root.join(&file_name);
     if destination.exists() {
+        inspect_snapshot(&destination).map_err(|e| format!("النسخة اليومية موجودة لكنها غير سليمة: {e}"))?;
         return Ok(AutomaticBackupReport {
             created: false, file_name, count: count_automatic_snapshots(&root)?,
             location: root.to_string_lossy().into_owned(),
@@ -379,10 +380,11 @@ fn inspect_snapshot(path: &std::path::Path) -> Result<(i64, i64), String> {
 
 fn snapshot_file_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
     // A filename only: prevents traversal, arbitrary database loading, and deletion.
-    let valid = name.len() == "ecolearchive-2026-11-08.sqlite3".len()
-        && name.starts_with("ecolearchive-") && name.ends_with(".sqlite3")
-        && name["ecolearchive-".len().."ecolearchive-".len()+10].bytes()
-            .enumerate().all(|(i, c)| if i == 4 || i == 7 { c == b'-' } else { c.is_ascii_digit() });
+    let bytes = name.as_bytes();
+    let valid = bytes.len() == b"ecolearchive-2026-11-08.sqlite3".len()
+        && bytes.starts_with(b"ecolearchive-") && bytes.ends_with(b".sqlite3")
+        && bytes.get(13..23).is_some_and(|date| date.iter().enumerate()
+            .all(|(i, c)| if i == 4 || i == 7 { *c == b'-' } else { c.is_ascii_digit() }));
     if !valid { return Err("اسم النسخة الاحتياطية غير مسموح".into()); }
     let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
     let path = root.join(name);
