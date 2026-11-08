@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import { Copy, Download, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronLeft, Copy, Download, Folder, FolderOpen, LayoutGrid, List, ShieldCheck } from "lucide-react";
 import { scanArchiveIntegrity, type IntegrityReport } from "@/lib/services/archiveIntegrity";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,8 @@ function ArchivePage() {
   const [type, setType] = useState("");
   const [service, setService] = useState("");
   const [groupBy, setGroupBy] = useState<ArchiveGroupBy>("none");
+  const [viewMode, setViewMode] = useState<"table" | "folders">("table");
+  const [openedFolder, setOpenedFolder] = useState<string | null>(null);
   const [sort, setSort] = useState<"date-desc" | "date-asc" | "title">("date-desc");
 
   const dupGroups = useMemo(() => {
@@ -79,7 +81,9 @@ function ArchivePage() {
     return [...list].sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ar") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   }, [docs, tab, cat, year, type, service, q, sort, dupGroups, relatedType, relatedId, correspondenceById]);
 
-  const grouped = useMemo(() => groupArchiveDocuments(filtered, groupBy, correspondenceById, t => DOC_TYPE_LABEL[t] ?? (t || "غير محدد")), [filtered, groupBy, correspondenceById]);
+  const effectiveGrouping = viewMode === "folders" && groupBy === "none" ? "year" : groupBy;
+  const grouped = useMemo(() => groupArchiveDocuments(filtered, effectiveGrouping, correspondenceById, t => DOC_TYPE_LABEL[t] ?? (t || "غير محدد")), [filtered, effectiveGrouping, correspondenceById]);
+  useEffect(() => { setOpenedFolder(null); }, [effectiveGrouping, tab, cat, year, type, service, q]);
 
   const counts = {
     active: docs.filter((d) => !d.deletedAt && d.status === "active").length,
@@ -123,7 +127,7 @@ function ArchivePage() {
           <select className="field-select" aria-label="المصلحة أو الجهة المعنية" value={service} onChange={e => setService(e.target.value)}>
             <option value="">كل المصالح والجهات</option>{serviceOptions.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
-          <select className="field-select" aria-label="تجميع الوثائق" value={groupBy} onChange={e => setGroupBy(e.target.value as ArchiveGroupBy)}>
+          <select className="field-select" aria-label="تجميع الوثائق" value={groupBy} onChange={e => { setGroupBy(e.target.value as ArchiveGroupBy); setOpenedFolder(null); }}>
             <option value="none">عرض جميع الوثائق</option>
             <option value="year">تجميع حسب السنة الدراسية</option>
             <option value="type">تجميع حسب نوع الملف</option>
@@ -133,6 +137,17 @@ function ArchivePage() {
             <option value="date-desc">الأحدث أولا</option><option value="date-asc">الأقدم أولا</option><option value="title">حسب العنوان</option>
           </select>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-3">
+          <div className="text-xs text-muted-foreground">{filtered.length} وثيقة مطابقة</div>
+          <div className="inline-flex items-center gap-1 rounded-lg border bg-muted/30 p-1" role="group" aria-label="طريقة عرض الأرشيف">
+            <Button type="button" size="sm" variant={viewMode === "table" ? "default" : "ghost"} aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>
+              <List className="h-4 w-4" /> عرض الجدول
+            </Button>
+            <Button type="button" size="sm" variant={viewMode === "folders" ? "default" : "ghost"} aria-pressed={viewMode === "folders"} onClick={() => { setViewMode("folders"); setOpenedFolder(null); }}>
+              <LayoutGrid className="h-4 w-4" /> عرض المجلدات
+            </Button>
+          </div>
+        </div>
         {tab === "dups" && (
           <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-muted p-3 text-xs text-muted-foreground">
             <Copy className="h-4 w-4" /> تكشف المكررات عبر البصمة الرقمية SHA-256 لمحتوى الملف. لا يحذف أي ملف تلقائيا؛ راجع كل مجموعة وقرر يدويا.
@@ -141,13 +156,51 @@ function ArchivePage() {
         )}
         {tab === "bin" && <div className="mx-3 mb-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">الوثائق في السلة قابلة للاستعادة. الحذف النهائي يزيل النسخة المخزنة في التطبيق فقط.</div>}
         {error ? <div className="p-3"><ErrorBox error={error} /></div> : loading ? <Loading /> : (
-          <div className="space-y-3">
-            {grouped.length === 0 && <DocumentTable docs={[]} cats={cats} mode={tab === "bin" ? "bin" : "active"} />}
-            {grouped.map(group => <section key={group.label || "all"} aria-label={group.label || "الوثائق"}>
-              {groupBy !== "none" && <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-sm font-semibold"><span>{group.label}</span><span className="text-xs text-muted-foreground">{group.docs.length} وثيقة</span></div>}
-              <DocumentTable docs={group.docs} cats={cats} mode={tab === "bin" ? "bin" : "active"} />
-            </section>)}
-          </div>
+          viewMode === "folders" ? (
+            <div className="space-y-4 p-3 md:p-4">
+              {grouped.length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">لا توجد وثائق مطابقة</div> : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {grouped.map((group) => {
+                      const opened = openedFolder === group.label;
+                      return (
+                        <button key={group.label} type="button" aria-expanded={opened}
+                          onClick={() => setOpenedFolder(opened ? null : group.label)}
+                          className={cn("group flex min-w-0 items-center gap-3 rounded-xl border p-4 text-start transition-all hover:border-amber-400/60 hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
+                            opened ? "border-amber-500/60 bg-amber-500/5 shadow-sm" : "bg-card")}>
+                          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-300">
+                            {opened ? <FolderOpen className="h-7 w-7" /> : <Folder className="h-7 w-7" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold" title={group.label}>{group.label}</span>
+                            <span className="text-xs text-muted-foreground">{group.docs.length} وثيقة</span>
+                          </span>
+                          {opened ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {grouped.filter(group => group.label === openedFolder).map(group => (
+                    <section key={group.label} className="overflow-hidden rounded-xl border" aria-label={`وثائق ${group.label}`}>
+                      <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-3">
+                        <span className="flex items-center gap-2 text-sm font-semibold"><FolderOpen className="h-4 w-4 text-amber-600" />{group.label}</span>
+                        <Button size="sm" variant="ghost" onClick={() => setOpenedFolder(null)}>إغلاق <ChevronDown className="h-4 w-4 rotate-180" /></Button>
+                      </div>
+                      <DocumentTable docs={group.docs} cats={cats} mode={tab === "bin" ? "bin" : "active"} />
+                    </section>
+                  ))}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {grouped.length === 0 && <DocumentTable docs={[]} cats={cats} mode={tab === "bin" ? "bin" : "active"} />}
+              {grouped.map(group => <section key={group.label || "all"} aria-label={group.label || "الوثائق"}>
+                {effectiveGrouping !== "none" && <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-sm font-semibold"><span>{group.label}</span><span className="text-xs text-muted-foreground">{group.docs.length} وثيقة</span></div>}
+                <DocumentTable docs={group.docs} cats={cats} mode={tab === "bin" ? "bin" : "active"} />
+              </section>)}
+            </div>
+          )
         )}
       </div>
     </div>
