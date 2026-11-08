@@ -221,6 +221,110 @@ fn restore_verified_backup(app: tauri::AppHandle, plan: ImportPlan) -> Result<Im
     tx.commit().map_err(|e|e.to_string())?;
     Ok(ImportReport{records:plan.records.len(),attachments:plan.attachments.len()})
 }
+/// Verified local snapshot of the full SQLite database, including attachment blobs.
+/// The backup lives in the app data directory, away from the live database.
+/// Re-running the command on the same day does not overwrite an existing backup.
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+struct AutomaticBackupReport {
+    created: bool,
+    file_name: String,
+    count: usize,
+    location: String,
+}
+
+#[tauri::command]
+fn automatic_archive_backup(app: tauri::AppHandle) -> Result<AutomaticBackupReport, String> {
+    let conn = connect(&app)?;
+    let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("automatic-backups");
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let today: String = conn.query_row("SELECT strftime('%Y-%m-%d','now')", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let file_name = format!("ecolearchive-{}.sqlite3", today);
+    let destination = root.join(&file_name);
+    if destination.exists() {
+        return Ok(AutomaticBackupReport {
+            created: false, file_name, count: count_automatic_snapshots(&root)?,
+            location: root.to_string_lossy().into_owned(),
+        });
+    }
+    let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?.as_millis();
+    let temporary = root.join(format!(".pending-{}-{}.sqlite3", today, millis));
+    // VACUUM INTO writes a consistent snapshot even while the normal database is in use.
+    let attempt = (|| -> Result<(), String> {
+        conn.execute("VACUUM INTO ?1", [temporary.to_string_lossy().as_ref()])
+            .map_err(|e| format!("تعذر نسخ قاعدة البيانات: {e}"))?;
+        let snapshot = Connection::open_with_flags(
+            &temporary, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ).map_err(|e| e.to_string())?;
+        let integrity: String = snapshot.query_row("PRAGMA integrity_check", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if integrity != "ok" { return Err("فشل فحص سلامة النسخة الاحتياطية".into()); }
+        let source_records: i64 = conn.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let source_files: i64 = conn.query_row("SELECT COUNT(*) FROM attachments", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let saved_records: i64 = snapshot.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let saved_files: i64 = snapshot.query_row("SELECT COUNT(*) FROM attachments", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if source_records != saved_records || source_files != saved_files {
+            return Err("تغيرت البيانات أثناء الفحص؛ لم تعتمد النسخة".into());
+        }
+        // Stored attachments are verified against their original SHA-256 digests.
+        {
+            let mut stmt = snapshot.prepare("SELECT sha256, data FROM attachments")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+            }).map_err(|e| e.to_string())?;
+            for row in rows {
+                let (hash, bytes) = row.map_err(|e| e.to_string())?;
+                let digest = format!("{:x}", Sha256::digest(&bytes));
+                if !hash.eq_ignore_ascii_case(&digest) {
+                    return Err("فشل فحص بصمة أحد المرفقات".into());
+                }
+            }
+        }
+        drop(snapshot);
+        fs::rename(&temporary, &destination).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if let Err(error) = attempt {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    // Rotation happens only after a fully verified snapshot has been committed.
+    let mut backups = list_automatic_snapshots(&root)?;
+    backups.sort();
+    for old in backups.iter().take(backups.len().saturating_sub(7)) {
+        fs::remove_file(root.join(old)).map_err(|e| e.to_string())?;
+    }
+    Ok(AutomaticBackupReport {
+        created: true, file_name, count: count_automatic_snapshots(&root)?,
+        location: root.to_string_lossy().into_owned(),
+    })
+}
+
+fn list_automatic_snapshots(folder: &std::path::Path) -> Result<Vec<String>, String> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.file_type().map_err(|e| e.to_string())?.is_file() { continue; }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.len() == "ecolearchive-2026-11-08.sqlite3".len()
+            && name.starts_with("ecolearchive-")
+            && name.ends_with(".sqlite3") {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+fn count_automatic_snapshots(folder: &std::path::Path) -> Result<usize, String> {
+    Ok(list_automatic_snapshots(folder)?.len())
+}
+
 #[tauri::command]
 async fn check_desktop_update(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_updater::UpdaterExt;
@@ -699,7 +803,7 @@ pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
+      .invoke_handler(tauri::generate_handler![open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,automatic_archive_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
