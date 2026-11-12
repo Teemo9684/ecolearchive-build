@@ -427,7 +427,7 @@
   white-space: nowrap;
   direction: rtl;
   will-change: transform;
-  animation: ecole-ticker-motion 18s linear infinite;
+  animation: ecole-ticker-motion 22s linear infinite;
 }
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
