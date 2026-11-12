@@ -420,7 +420,9 @@
 }
 .ecole-ticker-track {
   position: absolute;
-  left: 0;
+  /* Physical right edge, independent of the page's RTL layout direction. */
+  right: 0;
+  left: auto;
   top: 50%;
   width: max-content;
   max-width: none;
@@ -431,9 +433,11 @@
 }
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
+/* From fully outside the right boundary to fully outside the left boundary.
+   Track percentage = its own width; cqw = the viewport width. */
 @keyframes ecole-ticker-motion {
-  0% { transform: translate3d(100cqw,-50%,0); }
-  100% { transform: translate3d(-100%,-50%,0); }
+  0% { transform: translate3d(100%,-50%,0); }
+  100% { transform: translate3d(-100cqw,-50%,0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ecole-ticker-track {
