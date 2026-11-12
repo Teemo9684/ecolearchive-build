@@ -407,18 +407,42 @@
   * { scrollbar-color: auto; scrollbar-width: auto; }
 }
 
-/* Embedded glass newsroom ticker — seamless loop, pause on hover/focus. */
+/* School newsroom ticker: begin entirely beyond the RIGHT boundary and exit
+   beyond the LEFT boundary. Never start relative to the width of the headlines:
+   that caused short messages to appear suddenly in the middle of the bar. */
 .ecole-ticker-viewport {
-  /* The headline and its book divider gently vanish into the frosted heading. */
-  -webkit-mask-image: linear-gradient(to left, transparent 0%, rgba(0,0,0,.12) 12px, #000 90px, #000 100%);
-  mask-image: linear-gradient(to left, transparent 0%, rgba(0,0,0,.12) 12px, #000 90px, #000 100%);
+  position: relative;
+  height: 100%;
+  container-type: inline-size;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
 }
-.ecole-ticker-viewport { container-type: inline-size; }
-.ecole-ticker-track { animation: ecole-ticker-motion 18s linear infinite; }
+.ecole-ticker-track {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+  direction: rtl;
+  will-change: transform;
+  animation: ecole-ticker-motion 18s linear infinite;
+}
 .ecole-ticker-viewport:hover .ecole-ticker-track,
 .ecole-ticker-viewport:focus-within .ecole-ticker-track { animation-play-state: paused; }
-@keyframes ecole-ticker-motion { from { transform: translate3d(-100%,0,0); } to { transform: translate3d(100cqw,0,0); } }
-@media (prefers-reduced-motion: reduce) { .ecole-ticker-track { animation: none; } }
+@keyframes ecole-ticker-motion {
+  0% { transform: translate3d(100cqw,-50%,0); }
+  100% { transform: translate3d(-100%,-50%,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ecole-ticker-track {
+    animation: none;
+    position: static;
+    transform: none;
+  }
+  .ecole-ticker-viewport { overflow-x: auto; display: flex; align-items: center; }
+}
 
 /* Premium metallic relief for the original sidebar book and quill. No new drawing or backdrop. */
 .sidebar-book-3d { isolation: isolate; filter: drop-shadow(0 3px 1px rgba(39,17,1,.95)) drop-shadow(0 7px 7px rgba(0,0,0,.45)) drop-shadow(0 0 8px rgba(255,186,65,.26)); }
