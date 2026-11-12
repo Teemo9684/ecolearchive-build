@@ -230,7 +230,7 @@ function Dashboard() {
           <div dir="rtl" className="ecole-ticker-viewport min-w-0 flex-1 overflow-hidden" aria-label="مستجدات المنظومة">
             <div dir="rtl" className="ecole-ticker-track flex w-max items-center">
               {tickerItems.map((item,i) => <div key={i} className="flex shrink-0 items-center">
-                <button type="button" className="whitespace-nowrap px-4 text-xs font-medium text-slate-50 transition-colors hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300" onClick={() => item.to === "/" && availableUpdate && i===0 ? setAlertsOpen(true) : navigate({to:item.to as "/"})}>{item.text}</button>
+                <button type="button" className="whitespace-nowrap px-7 text-xs font-medium text-slate-50 transition-colors hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300" onClick={() => item.to === "/" && availableUpdate && i===0 ? setAlertsOpen(true) : navigate({to:item.to as "/"})}>{item.text}</button>
                 <img src={bookLogo} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
               </div>)}
             </div>
