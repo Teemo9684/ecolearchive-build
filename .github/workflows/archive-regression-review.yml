@@ -11,6 +11,8 @@ on:
       - 'src/components/app/documents.tsx'
       - 'src/routes/archive.tsx'
       - 'src/routes/settings.tsx'
+      - 'src/routes/index.tsx'
+      - 'src/styles.css'
       - 'src/components/app/AppShell.tsx'
       - 'src/lib/db/types.ts'
       - '.github/workflows/archive-regression-review.yml'
