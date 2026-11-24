@@ -5,7 +5,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Home, Plus, Inbox, Send, FolderOpen, Users, Baby, Package, TrendingUp, BarChart3,
-  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail, ChevronsLeft, ChevronsRight,
+  Settings, Info, Menu, Moon, Sun, X, Search, GraduationCap, Mail, ChevronsLeft, ChevronsRight, Monitor,
 } from "lucide-react";
 import { useCollection, useSettings } from "@/lib/db/hooks";
 import type { Correspondence } from "@/lib/db/types";
@@ -34,6 +34,7 @@ const NAV: NavItem[][] = [
     { to: "/inventory", label: "الجرد المدرسي", icon: Package },
     { to: "/admin-files", label: "التنقيط والمردودية", icon: TrendingUp },
     { to: "/reports", label: "التقارير والإحصائيات", icon: BarChart3 },
+    { to: "/digital-board", label: "اللوحة الرقمية", icon: Monitor },
   ],
   [
     { to: "/search", label: "البحث الشامل", icon: Search },

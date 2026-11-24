@@ -8,6 +8,7 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
+import { Route as DigitalBoardRouteImport } from './routes/digital-board'
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EmailRouteImport } from './routes/email'
@@ -26,6 +27,7 @@ import { Route as MailOutgoingRouteImport } from './routes/mail.outgoing'
 import { Route as TeachersIndexRouteImport } from './routes/teachers.index'
 import { Route as TeachersIdRouteImport } from './routes/teachers.$id'
 
+const DigitalBoardRoute = DigitalBoardRouteImport.update({ id: '/digital-board', path: '/digital-board', getParentRoute: () => rootRouteImport } as any)
 const EmailRoute = EmailRouteImport.update({
   id: '/email',
   path: '/email',
@@ -113,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
+  '/digital-board': typeof DigitalBoardRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -131,6 +134,7 @@ export interface FileRoutesByTo {
   '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
+  '/digital-board': typeof DigitalBoardRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -150,6 +154,7 @@ export interface FileRoutesById {
   '/email': typeof EmailRoute
   '/archive': typeof ArchiveRoute
   '/inventory': typeof InventoryRoute
+  '/digital-board': typeof DigitalBoardRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -170,6 +175,7 @@ export interface FileRouteTypes {
     | '/email'
     | '/archive'
     | '/inventory'
+    | '/digital-board'
     | '/reports'
     | '/search'
     | '/settings'
@@ -188,6 +194,7 @@ export interface FileRouteTypes {
     | '/email'
     | '/archive'
     | '/inventory'
+    | '/digital-board'
     | '/reports'
     | '/search'
     | '/settings'
@@ -206,6 +213,7 @@ export interface FileRouteTypes {
     | '/email'
     | '/archive'
     | '/inventory'
+    | '/digital-board'
     | '/reports'
     | '/search'
     | '/settings'
@@ -225,6 +233,7 @@ export interface RootRouteChildren {
   EmailRoute: typeof EmailRoute
   ArchiveRoute: typeof ArchiveRoute
   InventoryRoute: typeof InventoryRoute
+  DigitalBoardRoute: typeof DigitalBoardRoute
   ReportsRoute: typeof ReportsRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
@@ -275,6 +284,7 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/digital-board': { id: '/digital-board'; path: '/digital-board'; fullPath: '/digital-board'; preLoaderRoute: typeof DigitalBoardRouteImport; parentRoute: typeof rootRouteImport }
     '/reports': {
       id: '/reports'
       path: '/reports'
@@ -361,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   EmailRoute: EmailRoute,
   ArchiveRoute: ArchiveRoute,
   InventoryRoute: InventoryRoute,
+  DigitalBoardRoute: DigitalBoardRoute,
   ReportsRoute: ReportsRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,

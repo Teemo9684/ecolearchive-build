@@ -11,5 +11,5 @@ export const RECORD_TYPE: Record<StaffRecordType, string> = {
 export const NAV_FR: Record<string, string> = {
   "/": "Tableau de bord", "/archive": "Archive numérique", "/mail/incoming": "Courrier arrivé", "/mail/outgoing": "Courrier départ",
   "/teachers": "Enseignants", "/employees": "Personnel", "/admin-files": "Dossiers administratifs", "/students": "Élèves",
-  "/inventory": "Finances et inventaire", "/templates": "Création de documents", "/reports": "Rapports", "/search": "Recherche", "/settings": "Paramètres",
+  "/inventory": "Finances et inventaire", "/templates": "Création de documents", "/reports": "Rapports", "/digital-board": "Tableau numérique", "/search": "Recherche", "/settings": "Paramètres",
 };

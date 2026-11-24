@@ -19,6 +19,7 @@ export const STORES = [
   "templates",
   "settings",
   "auditLogs",
+  "digitalBoard",
 ] as const;
 export type StoreName = (typeof STORES)[number];
 
@@ -32,7 +33,7 @@ export interface Repository<T extends { id: string }> {
 }
 
 const DB_NAME = "tebessi-school-archive";
-const VERSION = 1;
+const VERSION = 2;
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDB(): Promise<IDBDatabase> {

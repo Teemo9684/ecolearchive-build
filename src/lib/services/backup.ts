@@ -32,6 +32,8 @@ export async function verifyBackup(file: File): Promise<BackupCheck> {
   let data: BackupFile;
   try { data = JSON.parse(await file.text()); } catch { throw new Error("الملف ليس نسخة احتياطية صالحة"); }
   if (!data || data.format !== FORMAT || data.version !== VERSION || !data.stores || typeof data.stores !== "object") throw new Error("صيغة النسخة الاحتياطية غير معروفة");
+  // Older backups predate the optional digital board collection.
+  if (!Object.prototype.hasOwnProperty.call(data.stores,"digitalBoard") && !Object.prototype.hasOwnProperty.call(data.counts ?? {},"digitalBoard")) { data.stores.digitalBoard=[]; data.counts={...data.counts,digitalBoard:0}; }
   for (const s of STORES) {
     if (!Array.isArray(data.stores[s])) throw new Error("نسخة احتياطية غير مكتملة: " + s);
     if (data.stores[s].some((x: any) => !x || typeof x.id !== "string")) throw new Error("بيانات غير صالحة في: " + s);

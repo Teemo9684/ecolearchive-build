@@ -11,7 +11,7 @@ const SCHEMA: &str = include_str!("../../sqlite/001_init.sql");
 const COLLECTIONS: &[&str] = &[
     "academicYears", "archiveCategories", "documents", "documentFiles",
     "correspondences", "teachers", "employees", "staffRecords", "students",
-    "classes", "inventoryItems", "templates", "settings", "auditLogs",
+    "classes", "inventoryItems", "templates", "settings", "auditLogs", "digitalBoard",
 ];
 
 fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -153,7 +153,7 @@ fn import_verified_backup(app: tauri::AppHandle, plan: ImportPlan) -> Result<Imp
     let current:i64 = tx.query_row("SELECT (SELECT count(*) FROM records) + (SELECT count(*) FROM attachments)",[],|r|r.get(0)).map_err(|e|e.to_string())?;
     if current != 0 { return Err("قاعدة البيانات ليست فارغة. لا يمكن الكتابة فوق البيانات الحالية".into()); }
     for name in COLLECTIONS {
-        if !plan.counts.contains_key(*name) { return Err(format!("Missing backup collection: {name}")); }
+        if *name != "digitalBoard" && !plan.counts.contains_key(*name) { return Err(format!("Missing backup collection: {name}")); }
     }
     let expected:usize = plan.counts.iter().filter(|(name,_)| name.as_str() != "documentFiles").map(|(_,v)|v).sum();
     if expected != plan.records.len() || plan.counts.get("documentFiles") != Some(&plan.attachments.len()) {
@@ -188,7 +188,7 @@ fn restore_verified_backup(app: tauri::AppHandle, plan: ImportPlan) -> Result<Im
     let mut conn=connect(&app)?;
     let tx=conn.transaction().map_err(|e|e.to_string())?;
     for name in COLLECTIONS {
-        if !plan.counts.contains_key(*name) {return Err(format!("Missing backup collection: {name}"));}
+        if *name != "digitalBoard" && !plan.counts.contains_key(*name) {return Err(format!("Missing backup collection: {name}"));}
     }
     let expected:usize=plan.counts.iter().filter(|(name,_)|name.as_str()!="documentFiles").map(|(_,n)|*n).sum();
     if plan.records.len()!=expected || plan.counts.get("documentFiles")!=Some(&plan.attachments.len()) {
