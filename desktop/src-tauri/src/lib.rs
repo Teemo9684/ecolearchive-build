@@ -1,5 +1,6 @@
 mod gmail_oauth;
 mod board_lan;
+mod board_pair;
 mod board_office;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -948,8 +949,9 @@ pub fn run() {
     tauri::Builder::default()
       .plugin(tauri_plugin_updater::Builder::new().build())
       .manage(board_lan::BoardLan::default())
+      .manage(board_pair::PairState::default())
       .manage(UpdateProgressStore(std::sync::Arc::new(std::sync::Mutex::new(UpdateDownloadProgress { downloaded: 0, total: None, phase: "idle".into() }))))
-      .invoke_handler(tauri::generate_handler![board_office::board_office_pdf,board_lan::board_lan_start,board_lan::board_lan_stop,board_lan::board_lan_status,open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,automatic_archive_backup,list_verified_archive_backups,restore_automatic_archive_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
+      .invoke_handler(tauri::generate_handler![board_pair::board_discover,board_pair::board_pair_begin,board_pair::board_pair_finish,board_pair::board_paired,board_pair::board_unpair,board_pair::board_push,board_office::board_office_pdf,board_lan::board_lan_start,board_lan::board_lan_stop,board_lan::board_lan_status,open_google_cloud_clients,gmail_oauth::gmail_set_client_secret,gmail_oauth::gmail_has_client_secret,gmail_oauth::gmail_connect,gmail_oauth::gmail_account_status,gmail_oauth::gmail_sign_out,gmail_oauth::gmail_list_messages,gmail_oauth::gmail_read_message,gmail_oauth::gmail_message_attachments,gmail_oauth::gmail_download_attachment,gmail_oauth::gmail_preview_attachment,gmail_oauth::gmail_open_attachment_for_print,gmail_oauth::gmail_send_message,gmail_oauth::gmail_update_message,gmail_oauth::gmail_save_draft,gmail_oauth::gmail_draft_action,gmail_oauth::gmail_search_messages,gmail_oauth::gmail_inbox_state,gmail_oauth::gmail_inbox_arrivals_since,list_records,get_record,put_record,put_many_records,remove_record,clear_records,list_files,get_file,put_file,remove_file,clear_files,import_verified_backup,restore_verified_backup,automatic_archive_backup,list_verified_archive_backups,restore_automatic_archive_backup,check_desktop_update,install_desktop_update,get_update_download_progress,create_word_document,read_generated_word_document,installed_app_version,list_user_word_templates,read_user_word_template,user_word_template_folder,open_generated_docx,preview_generated_docx_pdf,open_generated_pdf])
       .run(tauri::generate_context!())
       .expect("Could not start school desktop app");
 }
