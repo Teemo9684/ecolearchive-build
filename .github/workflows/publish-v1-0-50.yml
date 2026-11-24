@@ -1,0 +1,54 @@
+name: Publish verified EcoleArchive 1.0.50 artifact
+on:
+  push:
+    branches: [feature/digital-board]
+    paths: ['.github/workflows/publish-v1-0-50.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ecolearchive-publish-v1-0-50
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: windows-updates
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: EcoleArchive-1.0.50-signed
+          path: release
+          github-token: ${{ github.token }}
+          run-id: 45468279671
+      - name: Validate signed release contents before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/EcoleArchive-1.0.50-x64-setup.exe
+          test -s release/EcoleArchive-1.0.50-x64-setup.exe.sig
+          test -s release/latest.json
+          node -e '
+          const fs=require("fs");
+          const m=JSON.parse(fs.readFileSync("release/latest.json","utf8"));
+          const signature=fs.readFileSync("release/EcoleArchive-1.0.50-x64-setup.exe.sig","utf8").trim();
+          const p=m.platforms?.["windows-x86_64"];
+          if(m.version!=="1.0.50" || !p || p.signature!==signature ||
+             p.url!=="https://github.com/Teemo9684/ecolearchive-updates/releases/download/v1.0.50/EcoleArchive-1.0.50-x64-setup.exe" || signature.length<50) process.exit(1);
+          '
+          sha256sum release/*
+      - name: Create and publish version only after successful build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" || { echo "Missing release token"; exit 1; }
+          REPO=Teemo9684/ecolearchive-updates
+          if gh release view v1.0.50 -R "$REPO" >/dev/null 2>&1; then
+            echo "Release v1.0.50 already exists; refusing to overwrite"; exit 1
+          fi
+          gh release create v1.0.50 release/EcoleArchive-1.0.50-x64-setup.exe release/EcoleArchive-1.0.50-x64-setup.exe.sig release/latest.json -R "$REPO" --draft --title 'EcoleArchive v1.0.50' --notes 'تطوير اكتشاف أجهزة العرض والاقتران برمز مؤقت والمزامنة المشفرة مع تأكيد التفعيل. يتطلب تطبيق Android 0.5.0 التجريبي؛ اختبار الشبكة الميداني لم يكتمل بعد.'
+          gh release view v1.0.50 -R "$REPO" --json isDraft,assets | jq -e '.isDraft == true and ([.assets[].name] | (index("EcoleArchive-1.0.50-x64-setup.exe") != null and index("EcoleArchive-1.0.50-x64-setup.exe.sig") != null and index("latest.json") != null))'
+          gh release edit v1.0.50 -R "$REPO" --draft=false --latest
+          gh release view v1.0.50 -R "$REPO" --json isDraft,url,assets | jq -e '.isDraft == false'
