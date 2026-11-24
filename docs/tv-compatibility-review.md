@@ -1,0 +1,5 @@
+# TV compatibility review
+Reviewed Teemo9684/tabsi-school-spotlight main: src/lib/tv/data.ts, sync.ts, components/tv/TvApp.tsx.
+Receiver GET /tv/manifest.json and /tv/snapshot.json; FNV-1a over JS JSON.stringify; poll 30s; localStorage cache. Existing receiver does not authenticate, use cryptographic integrity, acknowledge activation, or support binary assets. The current export is review-only, not a production transport. No HTTP listener is enabled.
+Projection uses only approved content. Missing school fields and staff dimensions must be treated as unavailable (not verified zeros); coordinate TV empty-state behavior before deployment. Current timetable projection is work hours only. Multiple pages of the same screen cannot be distinguished by existing playlist. PDF/image assets must be supported in TV contract before enabling export of such snapshots.
+Required shared changes: authenticated encrypted transport, strong integrity and asset staging, monotonic revision with rollback handling, acknowledgement, explicit unavailable values, page IDs, PDF/image pages, cache capacity, disable bundled demo in production. No TV repository changes from this chat.
