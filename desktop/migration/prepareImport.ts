@@ -29,6 +29,7 @@ export function prepareDesktopImport(input: unknown): DesktopImportPlan {
   const attachments: DesktopImportPlan["attachments"] = [];
   const counts: Record<string, number> = {};
   for (const store of STORES) {
+    if (store === "digitalBoard" && !(store in b.stores) && !(store in b.counts)) { counts[store]=0; continue; }
     const entries = b.stores[store];
     if (!Array.isArray(entries)) throw new Error("جدول مفقود: " + store);
     if (b.counts[store] !== entries.length) throw new Error("عدد السجلات غير مطابق: " + store);
