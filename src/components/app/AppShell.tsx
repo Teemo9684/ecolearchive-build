@@ -1,3 +1,4 @@
+import { syncBoard } from "@/lib/digital-board/auto-sync";
 import { useIncomingAlerts } from "@/lib/useIncomingAlerts";
 import { checkDesktopUpdateNow } from "@/lib/desktop-update-alert";
 import { useGmailUnreadCount } from "@/lib/gmail-unread";
@@ -46,6 +47,7 @@ const NAV: NavItem[][] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const settings = useSettings();
+  useEffect(()=>{if(!isDesktopRuntime())return;const tick=()=>void syncBoard();tick();const timer=window.setInterval(tick,30000);return()=>window.clearInterval(timer);},[]);
   const path = useRouterState({ select: (r) => r.location.pathname });
   const navigate = useNavigate();
   const corr = useCollection<Correspondence>("correspondences");
